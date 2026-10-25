@@ -86,6 +86,10 @@ LIMITATION_LABELS = (
     "they are not an interaction check or dosing advice."
 )
 LIMITATION_CITATIONS = "Citations were checked to point at retrieved sources; each claim's truth was not verified."
+LIMITATION_SHEET = (
+    "When-to-call sheet: the middle tier was written from retrieved sources and reviewed; the emergency and routine tiers "
+    "are fixed; names, numbers, and personal thresholds were added in the browser and never sent."
+)
 
 _CITATION_MARKER = re.compile(r"[\[【〔](\d+(?:\s*[,，]\s*\d+)*)[\]】〕]")
 
@@ -193,6 +197,7 @@ def build_handoff(
     articles: Sequence[dict] = (),
     answer: str | None = None,
     follow_up_questions: Sequence[str] = (),
+    sheet: bool = False,
 ) -> dict:
     """Assemble the clinician handoff as a plain dict (validated by `schemas.Handoff`).
 
@@ -229,6 +234,8 @@ def build_handoff(
         limitations.append(LIMITATION_UNCITED.format(sources=", ".join(map(str, support["uncited_sources"]))))
     if any(s["kind"] == "label_section" for s in sources):
         limitations.append(LIMITATION_LABELS)
+    if sheet:
+        limitations.append(LIMITATION_SHEET)
     limitations.append(LIMITATION_CITATIONS)
 
     if reason == "emergency":
