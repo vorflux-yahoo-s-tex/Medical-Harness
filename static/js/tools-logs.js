@@ -1,5 +1,5 @@
 import { bandBar, curveChart, niceTicks, scatter, sparkline } from './charts.js';
-import { escapeHtml as esc, isoDay } from './dom-utils.js';
+import { escapeHtml as esc, isoDay, pad } from './dom-utils.js';
 
 /*
  * Heart, blood pressure, sugar, breathing, weight and lab results:
@@ -8,7 +8,6 @@ import { escapeHtml as esc, isoDay } from './dom-utils.js';
  * Every number drawn or written here comes from the backend result (or is the person's own entry);
  * band edges, zones, targets, thresholds and averages are never worked out in the browser.
  */
-const pad = n => String(n).padStart(2, '0');
 const at = iso => new Date(`${iso}T12:00`);
 const shortDay = iso => at(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const shiftDay = (iso, by) => { const d = at(iso); d.setDate(d.getDate() + by); return isoDay(d); };
@@ -367,11 +366,6 @@ const hf = {
     };
   },
 };
-
-/** The "Result:" text lines are the rendered summary, rows and notes plus each tool's own `text` lines. */
-for (const t of [bp, glucose, glucose.secondary[0], lab, peak, hf]) {
-  t.toText = (r, v, c) => { const p = t.render(r, v, c); return [`Result: ${p.summary}`, ...(p.rows || []).map(([k, x]) => `${k}: ${x}`), ...(p.notes || []), ...(p.text || [])]; };
-}
 
 /** The "Result:" text lines are the rendered summary, rows and notes plus each tool's own `text` lines. */
 for (const t of [bp, glucose, glucose.secondary[0], lab, peak, hf]) {

@@ -256,9 +256,17 @@ function traceStepText(step) {
   const detail = String(step.detail || "").replace(/_/g, " ");
   return `${step.name} \xB7 ${step.status}${detail ? ` (${detail})` : ""} \xB7 ${step.elapsed_ms} ms`;
 }
+const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+const pad = (number) => String(number).padStart(2, "0");
+const lc = (text) => (/^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text);
+function el(tag, cls, html) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (html != null) node.innerHTML = html;
+  return node;
+}
 function claimSupportText(support) {
   if (!support) return "";
-  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
   const parts = [
     plural(support.citation_markers, "citation marker"),
     `${support.sources_cited} of ${plural(support.sources_retrieved, "source")} cited`
@@ -273,7 +281,6 @@ function stamp(date) {
   return `${day}, ${time}${zone ? ` (${zone})` : ""}`;
 }
 function isoDay(date) {
-  const pad = (number) => String(number).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 function downloadText(filename, text) {
@@ -328,10 +335,14 @@ export {
   claimSupportText,
   copyToClipboard,
   downloadText,
+  el,
   escapeAttr,
   escapeHtml,
   inputsText,
   isoDay,
+  lc,
+  pad,
+  plural,
   rafThrottle,
   readSse,
   renderAnswerBody,

@@ -62,7 +62,7 @@ import { ICON, svg } from './icons.js';
 import { TOOL_ICON } from './tool-icons.js';
 import { TOOL_CATALOG, TOOL_GROUPS, toolFor } from './tools-catalog.js';
 import { trapDialogFocus } from './dialog.js';
-import { copyToClipboard, downloadText, escapeAttr as attr, escapeHtml as esc, inputsText, isoDay, safeUrl, stamp } from './dom-utils.js';
+import { copyToClipboard, downloadText, el, escapeAttr as attr, escapeHtml as esc, inputsText, isoDay, lc, plural, safeUrl, stamp } from './dom-utils.js';
 import { clearPrintSheet, printSheet } from './print.js';
 
 const CHUNKS = { child: () => import('./tools-child.js'), logs: () => import('./tools-logs.js'), sheets: () => import('./tools-sheets.js') };
@@ -70,11 +70,7 @@ const NOT_AVAILABLE = 'This tool is not available right now.';
 // A hard stop (child dose) arrives with `error` AND `hard_stop`; it is a normal, renderable result, not a form error.
 const failed = r => Boolean((r.error || r.missing_inputs?.length) && !r.hard_stop);
 
-const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const lc = s => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const strip = o => Object.fromEntries(Object.entries(o || {}).filter(([, v]) => v != null));
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const pad = n => String(n).padStart(2, '0');
 
 // ---------- state ----------
 let dialog;

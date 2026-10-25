@@ -115,16 +115,16 @@ function cited(text, sources, print) {
 function sheetModel(r, values) {
   const fixed = r.type === 'answer' && r.sheet && typeof r.sheet === 'object' ? r.sheet : null;
   const lines = fixed && r.evidence_status === 'available' ? middleLines(r.answer) : [];
-  return { fixed, lines, sources: Array.isArray(r.articles) ? r.articles : [], v: values };
+  const own = String(values.thresholds || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean); // the person's own thresholds
+  return { fixed, lines, own, sources: Array.isArray(r.articles) ? r.articles : [], v: values };
 }
 
 function sheetHtml(m, print) {
-  const { fixed, lines, sources, v } = m;
+  const { fixed, lines, own, sources, v } = m;
   const id = `tier-${++serial}`;
   const emergency = v.emergency_number ? `Call ${phone(v.emergency_number)} now` : 'Call your local emergency number now';
   const numbers = [v.phone_day && phone(v.phone_day), v.phone_night && `after hours ${phone(v.phone_night)}`].filter(Boolean);
   const contact = `Call ${esc(v.contact_name || 'your care team')} today${numbers.length ? ` \u2014 ${numbers.join(' / ')}` : ''}`;
-  const own = String(v.thresholds || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const body = []; // consecutive bullets share one list
   for (const l of lines) {
     const html = cited(l.text, sources, print);
@@ -146,11 +146,10 @@ function sheetHtml(m, print) {
 }
 
 function wtcText(m) {
-  const { fixed, lines, sources, v } = m;
+  const { fixed, lines, own, sources, v } = m;
   const out = [`When-to-call sheet for ${v.condition}.`, WTC_LEAD, '', `${v.emergency_number ? `CALL ${v.emergency_number} NOW` : 'CALL YOUR LOCAL EMERGENCY NUMBER NOW'}`];
   out.push(...(fixed ? (fixed.emergency_signs || []).map(s => `- ${s}`).concat(fixed.emergency_line) : [WTC_NO_FIXED]), '');
   out.push(`CALL ${v.contact_name || 'YOUR CARE TEAM'} TODAY${v.phone_day ? ` \u2014 ${v.phone_day}` : ''}${v.phone_night ? ` / after hours ${v.phone_night}` : ''}`);
-  const own = String(v.thresholds || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (own.length) out.push('From your discharge paper:', ...own.map(l => `- ${l}`));
   out.push(`Warning signs for ${v.condition}:`);
   out.push(...(lines.length ? lines.map(l => `${l.bullet ? '- ' : ''}${l.text}`) : [WTC_BLANK]), '');

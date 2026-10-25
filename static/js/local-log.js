@@ -1,6 +1,5 @@
 const PREFIX = 'medical-harness.log.v1.';
 const KEYS = new Set(['bp', 'glucose', 'weight', 'peak_flow_zone']);
-export const MAX_ENTRIES = 400;
 export const STORAGE_FULL = 'The log could not be saved (storage full). It stays until you close this page.';
 
 let probe;
@@ -20,7 +19,7 @@ export function available() {
 }
 
 /** A fresh, empty log value. */
-export const emptyLog = (units = null) => ({ version: 1, units, personal_best: null, entries: [], updated_at: null });
+export const emptyLog = () => ({ version: 1, units: null, personal_best: null, entries: [], updated_at: null });
 
 const valid = value => value && typeof value === 'object' && value.version === 1 && Array.isArray(value.entries)
   && value.entries.every(entry => entry && typeof entry === 'object' && typeof entry.id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date));
@@ -54,10 +53,10 @@ export function remove(key) {
 }
 
 /** Plain-text export: header, one line per entry (chronological) and the last summary text if any. */
-export function exportText(def, data, summaryText) {
+export function exportText(cfg, data, summaryText) {
   const day = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const lines = [`${def.log.title || def.key} \u00B7 exported ${day} \u00B7 medical-harness`];
-  for (const entry of data.entries) lines.push(`${entry.date}${entry.time ? ` ${entry.time}` : ''}  ${def.log.entryText(entry, data)}`);
+  const lines = [`${cfg.title || cfg.key} \u00B7 exported ${day} \u00B7 medical-harness`];
+  for (const entry of data.entries) lines.push(`${entry.date}${entry.time ? ` ${entry.time}` : ''}  ${cfg.entryText(entry, data)}`);
   if (!data.entries.length) lines.push('No entries.');
   if (summaryText) lines.push('', 'Last summary', summaryText);
   return lines.join('\n') + '\n';

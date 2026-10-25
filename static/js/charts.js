@@ -155,9 +155,6 @@ export function bandBar({ title, desc, min, max, bands, markers = [], ticks, uni
   return svg + dataTable(rows, { head: table?.head ?? ['Band or marker', 'Value'], caption: table?.caption ?? title });
 }
 
-/** A bar whose bands are zones (for example green, yellow, red). Same options as bandBar. */
-export const gauge = options => bandBar(options);
-
 /**
  * A 0..max scale with a hatched "at or above threshold" region and the person's score marked.
  * { title, desc, min = 0, max, value, threshold, valueLabel, belowLabel, aboveLabel, unit }

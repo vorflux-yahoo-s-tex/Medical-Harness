@@ -2,15 +2,11 @@
    Field specs are documented at the top of tools.js. */
 import { ICON, svg } from './icons.js';
 import { TOOL_ICON } from './tool-icons.js';
-import { escapeAttr as attr, escapeHtml as esc, isoDay } from './dom-utils.js';
+import { el, escapeAttr as attr, escapeHtml as esc, isoDay, lc, pad, plural } from './dom-utils.js';
 
 const FACTOR = { kg: { lb: 2.2046226 }, lb: { kg: 0.45359237 }, cm: { in: 0.3937008 }, in: { cm: 2.54 } };
-const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const lc = s => (/^[A-Z][a-z]/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
 const opt = o => (Array.isArray(o) ? o : o && typeof o === 'object' ? [o.value, o.label] : [o, o]);
 const convert = (v, from, to) => (from === to ? v : v * (FACTOR[from]?.[to] ?? 1));
-const pad = n => String(n).padStart(2, '0');
-const today = () => isoDay(new Date());
 const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 let serial = 0;
 // ---------- form engine ----------
@@ -120,8 +116,7 @@ function makeField(spec, pfx) {
     controls = [input];
     const unitOf = () => (units ? root.querySelector(`input[name="${id}-unit"]:checked`).value : '');
     const first = units?.[0];
-    const base = v => (type === 'date' ? today() : type === 'time' ? nowTime() : '');
-    input.value = spec.value != null ? String(spec.value) : base();
+    input.value = spec.value != null ? String(spec.value) : type === 'date' ? isoDay(new Date()) : type === 'time' ? nowTime() : '';
     if (type === 'number') {
       const bounds = u => spec.bounds?.[u] || [spec.min, spec.max].map(b => (b == null ? null : u === first ? b : Math.round(convert(b, first, u) * 10) / 10));
       Object.assign(f, {

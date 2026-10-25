@@ -193,9 +193,8 @@ async def metrics(request: Request) -> dict:
 @router.get("/tools")
 async def list_tools() -> dict:
     tools = [{"key": key, "name": info["name"], "description": info["description"], "variables": info["variables"],
-              "source": info["source"], "scope": info["scope"], "kind": "calculator"} for key, info in TOOL_REGISTRY.items()]
-    tools += [{"key": key, "name": info["name"], "description": info["description"], "variables": info["variables"],
-               "source": info["source"], "scope": info["scope"], "kind": "form"} for key, info in FORM_TOOLS.items()]
+              "source": info["source"], "scope": info["scope"], "kind": kind}
+             for kind, registry in (("calculator", TOOL_REGISTRY), ("form", FORM_TOOLS)) for key, info in registry.items()]
     return {"tools": tools}
 
 
