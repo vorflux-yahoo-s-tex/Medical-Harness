@@ -40,12 +40,15 @@ Anatomy context belongs to each answer. Opening its native dialog imports the vi
 | app/api/routes.py, app/schemas.py | HTTP/SSE contract and validation |
 | app/context.py | Server clock, validated local context and per-turn time annotations |
 | app/pipeline.py, app/prompts.py | Bounded orchestration and reviewed answer policy |
+| app/handoff.py | Deterministic clinician handoff: reason, urgency, user questions, calculations, sources, limitations, fixed questions to ask, step trace |
 | app/cache.py, app/transport.py | TTL/LRU, single-flight and circuit breakers |
-| app/tools/clinical.py | Eight sourced calculators/converters |
-| app/tools/references.py | DailyMed and Europe PMC lookups |
+| app/tools/clinical.py | Ten sourced calculators/converters |
+| app/tools/references.py | DailyMed, openFDA label sections, and Europe PMC lookups |
 | static/js/anatomy-panel.js, atlas-viewer.js | Dialog and on-demand Three.js viewer |
 | static/js/education.js, context.js, dialog.js | Sourced visual guide, local settings and dialog keyboard behavior |
 | scripts/build_atlas.mjs, check_atlas.mjs | Reproducible packs and decoded geometry validation |
+| static/js/handoff.js | Lazy clinician-handoff dialog with Copy, Print, and Download |
 | evals/ | Synthetic evaluations and an offline review gate |
+| evals/failures.py, evals/doubles.py | Offline fault injection with doubles; generates docs/FAILURE_MODES.md |
 
 See [research decisions](RESEARCH.md), [tool boundaries](RELIABILITY.md), and [performance checks](PERFORMANCE.md).
