@@ -293,7 +293,7 @@ dialog::backdrop { background: #00000080; backdrop-filter: blur(3px); }
 .eye-diagram .drain-point { fill: var(--accent-soft); stroke: var(--brand); stroke-width: 3; }
 .eye-diagram .diagram-leader { stroke: var(--scroll); stroke-width: 1; }
 .eye-diagram text { fill: var(--muted); stroke: none; font: 17px 'Instrument Sans', sans-serif; }
-.eye-diagram .surgery-path { display: block; stroke: var(--focus); stroke-width: 5; stroke-linecap: butt; stroke-dasharray: 100; stroke-dashoffset: 100; }
+.eye-diagram .surgery-path { stroke: var(--focus); stroke-width: 5; stroke-linecap: butt; stroke-dasharray: 100; stroke-dashoffset: 100; }
 .eye-diagram .fluid-dots { stroke: var(--focus); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 0 15; fill: none; opacity: .9; }
 .eye-diagram .pressure-gauge { fill: none; stroke: var(--scroll); stroke-width: 2; }
 .eye-diagram .pressure-fill { fill: var(--focus); stroke: none; opacity: .6; transform: scaleY(0); transform-box: fill-box; transform-origin: bottom; }

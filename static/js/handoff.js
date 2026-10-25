@@ -35,7 +35,7 @@ function isoDay(date) {
 }
 
 function reasonBody(handoff) {
-  const line = REASON_LINES[handoff.reason] || 'The person asked for this summary.';
+  const line = REASON_LINES[handoff.reason] || REASON_LINES.user_requested;
   const screen = handoff.urgency === 'emergency'
     ? 'Emergency screen: flagged. The app told the person to call emergency services.'
     : handoff.urgency === 'unknown'

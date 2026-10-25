@@ -8,6 +8,9 @@ import math
 import time
 import uuid
 from pathlib import Path
+from typing import get_args
+
+from app.schemas import HandoffReason
 
 
 def digest(value):
@@ -16,8 +19,7 @@ def digest(value):
 
 DEFAULT_HANDOFF_REASON = {"emergency": "emergency", "follow_up": "clarification_pending",
                           "conversation": "user_requested", "answer": "answer_available"}
-HANDOFF_REASONS = {"user_requested", "evidence_unavailable", "review_unavailable", "clarification_limit",
-                   "clarification_pending", "emergency", "tool_input_missing", "answer_available"}
+HANDOFF_REASONS = set(get_args(HandoffReason))
 
 
 def check_result(case, result):

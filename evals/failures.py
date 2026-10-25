@@ -15,12 +15,15 @@ import os
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 
 from app.handoff import LIMITATION_COMBINATION, LIMITATION_UNREACHABLE, citation_indices
+from app.pipeline import CLARIFICATION_INTRO, AgentPipeline, cache_scope
+from app.schemas import Handoff
+from app.tools.references import ReferenceTools
 from evals.doubles import (
     EXTRACT_KEY, INJECTION_TEXT, SAFETY_KEY, TOOLS_KEY, TRIAGE_KEY,
     ScriptedEvidence, ScriptedLLM, default_script, mock_reference_client,
@@ -39,8 +42,8 @@ class Scenario:
     conversation: list[str]
     llm: ScriptedLLM
     evidence: ScriptedEvidence
+    checks: Callable[["Run"], dict[str, bool]]
     client: httpx.AsyncClient | None = None
-    checks: Callable[["Run"], dict[str, bool]] = field(default=lambda run: {})
 
 
 @dataclass
@@ -60,18 +63,12 @@ class Run:
 
 # ---------------------------------------------------------------- scenario helpers
 
-def _pipeline(triage, *, tools=None, extract=None, faults=None, evidence=None, references=None,
-              safety=None, stream_text="A supported explanation [1]."):
-    from app.pipeline import AgentPipeline
-
+def _scenario(triage, conversation, *, tools=None, extract=None, faults=None, evidence=None, references=None,
+              safety=None, stream_text="A supported explanation [1].", client=None, checks=None) -> Scenario:
     llm = ScriptedLLM(default_script(triage, tools, safety, extract), stream_text=stream_text, faults=faults)
     evidence = evidence or ScriptedEvidence()
-    return AgentPipeline(llm=llm, evidence=evidence, references=references), llm, evidence
-
-
-def _scenario(triage, conversation, *, client=None, references=None, checks=None, **kwargs) -> Scenario:
-    pipeline, llm, evidence = _pipeline(triage, references=references, **kwargs)
-    return Scenario(pipeline, conversation, llm, evidence, client, checks or (lambda run: {}))
+    pipeline = AgentPipeline(llm=llm, evidence=evidence, references=references)
+    return Scenario(pipeline, conversation, llm, evidence, checks or (lambda run: {}), client)
 
 
 def _label_row(generic: str, brand: str, set_id: str = SET_ID) -> dict:
@@ -84,8 +81,6 @@ def _label_row(generic: str, brand: str, set_id: str = SET_ID) -> dict:
 
 
 def _label_scenario(responder, *, circuit_open=False, checks=None) -> Scenario:
-    from app.tools.references import ReferenceTools
-
     client = mock_reference_client(responder)
     references = ReferenceTools(client=client)
     if circuit_open:
@@ -179,8 +174,6 @@ def build_source_excerpt_injection() -> Scenario:
 
 
 def build_clarification_limit() -> Scenario:
-    from app.pipeline import CLARIFICATION_INTRO
-
     conversation = ["I have a headache", f"{CLARIFICATION_INTRO} How long has it lasted?", "About three days"]
     return _scenario({"action": "ask", "follow_up_questions": ["Any other symptoms?"]}, conversation,
                      checks=lambda run: {"no_second_round": run.result["type"] != "follow_up" and not run.result["follow_up_questions"],
@@ -313,9 +306,6 @@ def _leaks(run: Run, expected_error: bool) -> bool:
 
 
 async def _run_case(case: dict, timeout: float = 30.0) -> dict:
-    from app.pipeline import cache_scope
-    from app.schemas import Handoff
-
     cache_scope.set(str(uuid.uuid4()))
     scenario = case["build"]()
     events: list[tuple[str, dict]] = []

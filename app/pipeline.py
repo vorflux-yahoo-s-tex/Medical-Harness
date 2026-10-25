@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.context import contextualize
 from app.conversation import CONVERSATION_REPLIES, routine_kind
 from app.evidence import EvidenceRetriever
-from app.handoff import TRACE_DETAILS, TRACE_STEPS, build_handoff, citation_indices
+from app.handoff import TRACE_DETAILS, TRACE_STEPS, build_handoff, citation_indices, skipped_step
 from app.json_utils import parse_json_response
 from app.llm import CerebrasClient
 from app.prompts import (
@@ -61,6 +61,14 @@ class _RunTrace:
         if name in self._started and name not in self._elapsed:
             self._elapsed[name] = int((time.monotonic() - self._started[name]) * 1000)
 
+    async def timed(self, name: str, awaitable):
+        """Await `awaitable` with the step clock running, whatever the outcome."""
+        self.start(name)
+        try:
+            return await awaitable
+        finally:
+            self.stop(name)
+
     def finish(self, name: str, status: str, detail: str = "") -> None:
         if detail not in TRACE_DETAILS:
             raise ValueError("Trace detail must come from the fixed vocabulary")
@@ -72,8 +80,7 @@ class _RunTrace:
         return self._steps.get(name, {}).get("status") == status
 
     def steps(self) -> list[dict]:
-        return [dict(self._steps.get(name) or {"name": name, "status": "skipped", "elapsed_ms": 0, "detail": ""})
-                for name in TRACE_STEPS]
+        return [self._steps.get(name) or skipped_step(name) for name in TRACE_STEPS]
 
 
 def _empty_result(**overrides) -> dict:
@@ -230,22 +237,10 @@ class AgentPipeline:
             yield ("step", {"step": "tools", "message": "Checking relevant tools and sources…"})
             tools_info: dict = {}
             evidence_info: dict = {}
-
-            async def timed_tools():
-                trace.start("tools")
-                try:
-                    return await self._run_tools(conv_text, tools_info)
-                finally:
-                    trace.stop("tools")
-
-            async def timed_evidence():
-                trace.start("evidence")
-                try:
-                    return await self._retrieve_evidence(conversation, conversation_id, evidence_info)
-                finally:
-                    trace.stop("evidence")
-
-            tool_results, evidence_result = await asyncio.gather(timed_tools(), timed_evidence())
+            tool_results, evidence_result = await asyncio.gather(
+                trace.timed("tools", self._run_tools(conv_text, tools_info)),
+                trace.timed("evidence", self._retrieve_evidence(conversation, conversation_id, evidence_info)),
+            )
             if tools_info.get("failed"):
                 trace.finish("tools", "failed", "selection_failed")
             elif not tools_info.get("selected"):
@@ -396,7 +391,7 @@ class AgentPipeline:
         cached = await self.step_cache.get_or_compute(key, wrapped)
         return None if cached is self._NONE_SENTINEL else cached
 
-    async def _retrieve_evidence(self, conversation: list[str], conversation_id: str, info: dict | None = None) -> dict:
+    async def _retrieve_evidence(self, conversation: list[str], conversation_id: str, info: dict) -> dict:
         key = text_key("evidence-v5", cache_scope.get(), conversation_id, contextualize(conversation))
         async def compute():
             try:
@@ -405,16 +400,13 @@ class AgentPipeline:
                 return await asyncio.to_thread(self.evidence.search, conversation, conversation_id)
             except Exception:
                 logger.warning("pipeline.evidence failed")
-                if info is not None:
-                    info["error"] = True
+                info["error"] = True
                 return {"response": "", "articles": [], "followups": []}
         return await self.evidence_cache.get_or_compute(
             key, compute, cache_if=lambda value: bool(value.get("articles"))
         )
 
-    async def _triage(self, conv_text: str, info: dict | None = None) -> dict:
-        info = info if info is not None else {}
-
+    async def _triage(self, conv_text: str, info: dict) -> dict:
         async def compute():
             info["detail"] = "unavailable"
             raw = await self.llm.generate(
@@ -443,8 +435,7 @@ class AgentPipeline:
         except Exception:
             raise ReviewUnavailable("Unable to assess this question safely. Please try again.") from None
 
-    async def _run_tools(self, conv_text: str, info: dict | None = None) -> list[dict]:
-        info = info if info is not None else {}
+    async def _run_tools(self, conv_text: str, info: dict) -> list[dict]:
         async def compute():
             raw = await self.llm.generate(
                 TOOL_SELECTION_USER.format(conversation=conv_text),

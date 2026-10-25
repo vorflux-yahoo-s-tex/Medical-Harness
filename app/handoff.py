@@ -108,8 +108,12 @@ def claim_support(answer: str, article_count: int) -> dict:
     }
 
 
+def skipped_step(name: str) -> dict:
+    return {"name": name, "status": "skipped", "elapsed_ms": 0, "detail": ""}
+
+
 def skipped_steps() -> list[dict]:
-    return [{"name": name, "status": "skipped", "elapsed_ms": 0, "detail": ""} for name in TRACE_STEPS]
+    return [skipped_step(name) for name in TRACE_STEPS]
 
 
 def _text(value) -> str:
@@ -118,10 +122,10 @@ def _text(value) -> str:
 
 def _headline(result: dict) -> tuple[str, str]:
     """Mirror of toolHeadline in static/js/dom-utils.js: value, score, bmi, grade."""
-    for field, units in (("value", None), ("score", ""), ("bmi", ""), ("grade", "")):
+    for field in ("value", "score", "bmi", "grade"):
         number = result.get(field)
         if isinstance(number, (int, float)) and not isinstance(number, bool):
-            return str(number), _text(result.get("units")) if units is None else units
+            return str(number), _text(result.get("units")) if field == "value" else ""
     return "", ""
 
 
@@ -132,10 +136,7 @@ def _calculation(result: dict) -> dict:
     missing = result.get("missing_inputs")
     return {
         "tool": _text(result.get("tool")),
-        "inputs": {
-            str(k): v for k, v in inputs.items()
-            if isinstance(v, (int, float, bool, str)) and not (isinstance(v, float) and v != v)
-        },
+        "inputs": {str(k): v for k, v in inputs.items() if isinstance(v, (int, float, bool, str))},
         "result": value,
         "units": units,
         "source": _text(result.get("source")),
@@ -212,17 +213,19 @@ def build_handoff(
         limitations.append(LIMITATION_PENDING.format(questions=" ".join(follow_up_questions)))
     elif reason in LIMITATION_BY_REASON:
         limitations.append(LIMITATION_BY_REASON[reason])
-    for original, ref in zip((r for r in tool_results if "items" in r), references):
-        if original.get("combination_only"):
+    for result in tool_results:
+        if "items" not in result:
+            continue
+        if result.get("combination_only"):
             limitations.append(LIMITATION_COMBINATION)
-        elif ref["status"] == "unavailable":
-            limitations.append(LIMITATION_UNREACHABLE.format(tool=ref["tool"]))
-        elif ref["status"] == "empty":
-            limitations.append(LIMITATION_EMPTY.format(tool=ref["tool"]))
+        elif result.get("status") == "unavailable":
+            limitations.append(LIMITATION_UNREACHABLE.format(tool=_text(result.get("tool"))))
+        elif result.get("status") == "empty":
+            limitations.append(LIMITATION_EMPTY.format(tool=_text(result.get("tool"))))
     for calc in calculations:
         if calc["error"] or calc["missing_inputs"]:
             limitations.append(LIMITATION_CALC_INPUTS.format(tool=calc["tool"]))
-    if support and support["uncited_sources"] and sources:
+    if support and support["uncited_sources"]:
         limitations.append(LIMITATION_UNCITED.format(sources=", ".join(map(str, support["uncited_sources"]))))
     if any(s["kind"] == "label_section" for s in sources):
         limitations.append(LIMITATION_LABELS)

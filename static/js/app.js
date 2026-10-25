@@ -100,8 +100,7 @@ function handoffButtonHtml(msgId) {
 
 function registerHandoff(msgId, handoff, receivedAt) {
   if (!handoff || typeof handoff !== 'object' || Array.isArray(handoff)) return false;
-  messageHandoff.set(msgId, handoff);
-  messageReceivedAt.set(msgId, receivedAt || null);
+  messageHandoff.set(msgId, { handoff, receivedAt: receivedAt || null });
   return true;
 }
 
@@ -239,8 +238,7 @@ function renderTraceSection(handoff) {
 
 const messageArticles = new Map();
 const messageAnswerText = new Map();
-const messageHandoff = new Map();
-const messageReceivedAt = new Map();
+const messageHandoff = new Map(); // msgId -> { handoff, receivedAt }
 
 function finalizeFollowUp(wrap, data, msgId) {
   const msgEl = wrap.querySelector('.msg.assistant');
@@ -511,7 +509,6 @@ function startNewConversation() {
   messageArticles.clear();
   messageAnswerText.clear();
   messageHandoff.clear();
-  messageReceivedAt.clear();
   chatScrollInner.innerHTML = '';
   document.querySelectorAll('.followup-section').forEach(el => el.remove());
   closeArticleSidebar();
@@ -576,11 +573,11 @@ chatContainer.addEventListener('click', e => {
       break;
     }
     case 'open-handoff': {
-      const handoff = messageHandoff.get(el.dataset.msgId);
-      if (!handoff) break;
+      const entry = messageHandoff.get(el.dataset.msgId);
+      if (!entry) break;
       const version = sessionVersion;
-      const context = { receivedAt: messageReceivedAt.get(el.dataset.msgId) || null, conversationId };
-      import('./handoff.js').then(module => { if (version === sessionVersion && el.isConnected) module.openHandoff(handoff, context, el); }).catch(() => { if (version === sessionVersion) systemErrorMessage('The handoff summary could not load. Please try again.'); });
+      const context = { receivedAt: entry.receivedAt, conversationId };
+      import('./handoff.js').then(module => { if (version === sessionVersion && el.isConnected) module.openHandoff(entry.handoff, context, el); }).catch(() => { if (version === sessionVersion) systemErrorMessage('The handoff summary could not load. Please try again.'); });
       break;
     }
     case 'not-sure': {

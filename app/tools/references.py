@@ -134,8 +134,9 @@ class ReferenceTools:
         form = self._first(openfda.get("dosage_form"))
         product = clean_text(" ".join(part for part in (brand or generic, form.lower() if form else "") if part), 160)
         items = []
-        chosen = [(key, title) for key, title in LABEL_SECTIONS if key != "warnings" or not row.get("warnings_and_precautions")]
-        for key, title in chosen:
+        for key, title in LABEL_SECTIONS:
+            if key == "warnings" and row.get("warnings_and_precautions"):
+                continue  # OTC-style "warnings" only when the full section is absent
             values = row.get(key)
             values = [values] if isinstance(values, str) else values if isinstance(values, list) else []
             text = clean_text(" ".join(value for value in values if isinstance(value, str)), 1000)
