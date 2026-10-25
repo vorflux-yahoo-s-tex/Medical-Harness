@@ -350,3 +350,27 @@ def test_estimated_glucose_draws_the_adag_line():
     assert [p["a1c"] for p in result["line"]] == [5 + .5 * i for i in range(15)]
     assert result["point"] == {"a1c": 7, "eag": 154.2}
     assert result["key"] == "estimated_glucose"
+
+
+def test_infant_stop_comes_before_missing_or_unknown_concentration():
+    """A missing or unknown concentration must not hide the same-day call for a baby under 3 months."""
+    missing = TOOL_REGISTRY["child_dose_check"]["function"]({"medicine": "acetaminophen", "weight": 10, "weight_units": "lb", "age_months": 2})
+    assert missing["hard_stop"]["urgent"] and "missing_inputs" not in missing and "amount_ml" not in missing
+    unknown = dose(concentration="unknown", age_months=2)
+    assert unknown["hard_stop"]["title"] == "Baby under 3 months" and "amount_ml" not in unknown
+    assert dose(medicine="ibuprofen", concentration="unknown", age_months=2)["hard_stop"]["urgent"]
+    assert dose(medicine="ibuprofen", concentration="unknown", age_months=4)["hard_stop"]["title"] == "Baby under 6 months"
+    # Without an age the ordinary validation still applies.
+    assert "Invalid or out-of-range input: concentration." == dose(concentration="unknown")["error"]
+
+
+def test_hf_implausible_pair_keeps_the_contact_today_alert():
+    big_gain = hf(85, 70, "kg", "7_days")
+    assert "error" in big_gain and "value" not in big_gain and "zone" not in big_gain
+    assert big_gain["alerts"][0]["level"] == "call_today"
+    assert "alerts" not in hf(70, 85, "kg", "7_days")
+
+
+def test_huge_json_integers_are_a_bounded_input_error():
+    result = TOOL_REGISTRY["bmi"]["function"]({"weight_kg": 10**310, "height_cm": 175, "age_years": 30})
+    assert result["error"] == "Invalid or out-of-range input: weight_kg." and "bmi" not in result

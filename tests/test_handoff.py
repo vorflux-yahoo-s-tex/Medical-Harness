@@ -223,6 +223,14 @@ class TestContent:
         assert h["calculations"][0]["inputs"] == {"packs_per_day": 1, "years_smoked": 30}
         assert h["calculations"][0]["result"] == "30.0" and h["calculations"][0]["units"] == "pack-years"
 
+    def test_steadi_checklist_is_a_calculation_not_a_reference(self):
+        from app.tools.clinical import TOOL_REGISTRY
+        keys = TOOL_REGISTRY["steadi_fall_risk"]["variables"]
+        tool = TOOL_REGISTRY["steadi_fall_risk"]["function"]({key: key == "fallen_past_year" for key in keys})
+        h = build_handoff(["q"], "answer_available", None, triage_done=True, tool_results=[tool], articles=[], answer="ok")
+        assert h["references"] == [] and len(h["calculations"]) == 1
+        assert h["calculations"][0]["result"] == "2" and h["calculations"][0]["inputs"]["fallen_past_year"] is True
+
     def test_reference_limitations_and_label_note(self):
         tools = [
             {"tool": "DailyMed", "status": "unavailable", "items": [], "error": "down"},

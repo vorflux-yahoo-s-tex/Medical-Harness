@@ -32,13 +32,27 @@ def valid_text(value, max_len, allow_empty=False):
     return value
 
 
-def calculator(key, name, description, inputs, source, scope):
+def _finite_number(value):
+    """True for an int or float inside the double range; never raises (huge JSON ints overflow `math.isfinite`)."""
+    if type(value) is int:
+        return -1e308 < value < 1e308
+    return type(value) is float and math.isfinite(value)
+
+
+def calculator(key, name, description, inputs, source, scope, guard=None):
+    """`guard(data)` runs on the raw inputs before any validation so a fixed safety stop is
+    never hidden behind a missing or invalid unrelated field; it may raise `ToolError`."""
     def register(function):
         @wraps(function)
         def run(data):
             base = {"tool": name, "key": key, "source": source, "scope": scope}
             if not isinstance(data, dict):
                 return {**base, "error": "Inputs must be an object."}
+            try:
+                if guard is not None:
+                    guard(data)
+            except ToolError as exc:
+                return {**base, "error": str(exc), **exc.extra}
             missing = [field for field in inputs if data.get(field) is None]
             if missing:
                 return {**base, "error": "Required inputs were not supplied.", "missing_inputs": missing}
@@ -55,7 +69,7 @@ def calculator(key, name, description, inputs, source, scope):
                     valid = isinstance(value, str) and value in rule
                 else:
                     low, high = rule
-                    valid = type(value) in (int, float) and math.isfinite(value) and low <= value <= high
+                    valid = _finite_number(value) and low <= value <= high
                 if not valid:
                     return {**base, "error": f"Invalid or out-of-range input: {field}."}
             try:
@@ -270,6 +284,21 @@ def dose_stop(title, text, urgent=False):
     return ToolError(text, hard_stop={"title": title, "text": text, "urgent": urgent})
 
 
+INFANT_STOP = ("Baby under 3 months", "A fever in a baby under 3 months needs a same-day call to a clinician; this tool shows no amount.")
+IBUPROFEN_STOP = ("Baby under 6 months", "Ibuprofen is not for babies under 6 months unless a clinician directs it; no amount shown.")
+
+
+def child_dose_guard(data):
+    """Age-based stops come first: a missing or unknown concentration must not hide them."""
+    age = data.get("age_months")
+    if not _finite_number(age) or age < 0:
+        return
+    if age < 3:
+        raise dose_stop(*INFANT_STOP, urgent=True)
+    if age < 6 and data.get("medicine") == "ibuprofen":
+        raise dose_stop(*IBUPROFEN_STOP)
+
+
 @calculator(
     "child_dose_check", "Child fever-medicine dose check",
     "Label weight-band amount (US AAP table) of acetaminophen or ibuprofen. Needs medicine, concentration (160mg/5mL, 100mg/5mL, 50mg/1.25mL), weight, weight_units kg or lb, age_months; concentration from user's words. Not a prescription.",
@@ -277,13 +306,14 @@ def dose_stop(title, text, urgent=False):
      "weight": (2, 132), "weight_units": {"kg", "lb"}, "age_months": (0, 215)},
     "https://www.healthychildren.org/English/safety-prevention/at-home/medication-safety/Pages/Acetaminophen-for-Fever-and-Pain.aspx",
     "Children 3 months to 11 years in the US; the amount printed on the AAP label table for the weight band, not a calculated or personalised dose. Ibuprofen source: AAP HealthyChildren ibuprofen page.",
+    guard=child_dose_guard,
 )
 def compute_child_dose_check(data):
     medicine, concentration, age = data["medicine"], data["concentration"], data["age_months"]
-    if medicine == "acetaminophen" and age < 3:
-        raise dose_stop("Baby under 3 months", "A fever in a baby under 3 months needs a same-day call to a clinician; this tool shows no amount.", urgent=True)
+    if age < 3:
+        raise dose_stop(*INFANT_STOP, urgent=True)
     if medicine == "ibuprofen" and age < 6:
-        raise dose_stop("Baby under 6 months", "Ibuprofen is not for babies under 6 months unless a clinician directs it; no amount shown.")
+        raise dose_stop(*IBUPROFEN_STOP)
     bands = CHILD_DOSE_BANDS[medicine].get(concentration)
     if bands is None:
         raise dose_stop("Concentration does not match", "Concentration does not match the medicine; read it from the Drug Facts label.")
@@ -486,9 +516,11 @@ HF_ALERT = "Your weight gain reached the AHA threshold for contacting your care 
 def compute_hf_weight_zone(data):
     units, now, before = data["weight_units"], data["weight_now"], data["weight_before"]
     change = round(now - before, 6)
-    if abs(change) > 0.2 * before:
-        raise ValueError("The two weights differ by more than 20 %; check the numbers and units.")
     threshold = HF_THRESHOLDS[data["interval"]]
+    if abs(change) > 0.2 * before:
+        # No calculated result for an implausible pair, but a gain that would cross the AHA threshold keeps its warning.
+        extra = {"alerts": [{"level": "call_today", "text": HF_ALERT}]} if change >= threshold[units] else {}
+        raise ToolError("The two weights differ by more than 20 %; check the numbers and units.", **extra)
     zone = "call_team" if change >= threshold[units] else "within"
     change_kg, change_lb = (change, change * LB_PER_KG) if units == "kg" else (change / LB_PER_KG, change)
     result = {"value": round(change, 1), "units": units, "change_kg": round(change_kg, 1), "change_lb": round(change_lb, 1),

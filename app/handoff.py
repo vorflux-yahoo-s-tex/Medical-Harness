@@ -137,6 +137,11 @@ def _headline(result: dict) -> tuple[str, str]:
     return "", ""
 
 
+def is_reference(result):
+    """Reference lookups carry `status` and `items`; a checklist calculator (STEADI) has `items` but no `status`."""
+    return "items" in result and "status" in result
+
+
 def _calculation(result: dict) -> dict:
     inputs = result.get("inputs")
     inputs = inputs if isinstance(inputs, dict) else {}
@@ -211,8 +216,8 @@ def build_handoff(
     """
     tool_results = [r for r in tool_results if isinstance(r, dict)]
     articles = [a for a in articles if isinstance(a, dict)]
-    calculations = [_calculation(r) for r in tool_results if "items" not in r]
-    references = [_reference(r) for r in tool_results if "items" in r]
+    calculations = [_calculation(r) for r in tool_results if not is_reference(r)]
+    references = [_reference(r) for r in tool_results if is_reference(r)]
     support = claim_support(answer, len(articles)) if answer is not None else None
     uncited = set(support["uncited_sources"]) if support else set()
     sources = [_source(i, a, support is not None and i not in uncited) for i, a in enumerate(articles, 1)]

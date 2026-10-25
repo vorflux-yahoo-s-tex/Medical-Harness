@@ -259,3 +259,23 @@ def test_schedule_lookups_are_concurrent_but_bounded():
 def test_schedule_invalid_input_fails_closed(inputs):
     result = run("medication_schedule", inputs, FakeReferences())
     assert result["error"] and "grid" not in result
+
+
+def test_bp_emergency_alert_survives_an_invalid_companion_row():
+    result = run("bp_log_summary", {"readings": [bp(1, "08:00", 190, 100), bp(1, "09:00", 120, 80, pulse=10)]})
+    assert result["error"].startswith("Invalid or out-of-range input") and "averages" not in result
+    assert result["alerts"] == [{"level": "emergency", "text": forms.BP_ALERT}]
+    calm = run("bp_log_summary", {"readings": [bp(1, "08:00", 120, 80), bp(1, "09:00", 120, 80, pulse=10)]})
+    assert "alerts" not in calm
+
+
+def test_glucose_hypoglycaemia_alert_survives_an_invalid_companion_row():
+    result = run("glucose_log_pattern", {"readings": [glucose(50), {"date": "2026-10-01", "time": "08:00", "value": 100, "units": "mg/dL", "tag": "nope"}]})
+    assert "error" in result and result["alerts"][0]["level"] == "emergency"
+
+
+def test_times_with_a_timezone_are_rejected_not_crashed():
+    result = run("bp_log_summary", {"readings": [bp(1, "08:00", 120, 80), bp(1, "09:00Z", 120, 80)]})
+    assert result["error"] == "Invalid or out-of-range input: readings[1].time."
+    result = run("glucose_log_pattern", {"readings": [glucose(100), glucose(100, time="09:00+02:00")]})
+    assert result["error"] == "Invalid or out-of-range input: readings[1].time."

@@ -11,9 +11,9 @@ from datetime import date, datetime, time, timedelta
 from statistics import mean
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from app.tools.clinical import valid_text
+from app.tools.clinical import adag_line, valid_text
 
 LOOKUP_TIMEOUT_SECONDS = 8
 LOOKUP_CONCURRENCY = 4
@@ -27,7 +27,15 @@ def _iso_string(value):
 
 
 IsoDate = Annotated[date, BeforeValidator(_iso_string)]
-IsoTime = Annotated[time, BeforeValidator(_iso_string)]
+
+
+def _local_time(value: time):
+    if value.tzinfo is not None:
+        raise ValueError("must be a local clock time without a timezone")
+    return value
+
+
+IsoTime = Annotated[time, BeforeValidator(_iso_string), AfterValidator(_local_time)]
 StrictInt = Annotated[int, Field(strict=True)]
 StrictFloat = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 
@@ -174,7 +182,7 @@ class GlucoseReading(FormModel):
     time: IsoTime
     value: StrictFloat | StrictInt
     units: Literal["mg/dL", "mmol/L"]
-    tag: Literal["fasting", "before_meal", "after_meal", "bedtime", "other"]
+    tag: Literal[GLUCOSE_SLOTS]
 
     @model_validator(mode="after")
     def value_matches_units(self):
@@ -201,8 +209,6 @@ def _in_target(slot, value):
 
 
 def run_glucose_log_pattern(model: GlucoseLogInputs):
-    from app.tools.clinical import adag_line
-
     readings = sorted(model.readings, key=lambda r: (r.date, r.time))
     values = [(r, _mg_dl(r)) for r in readings]
     alerts = []
@@ -392,9 +398,41 @@ async def run_medication_schedule(model: ScheduleInputs, references):
 
 # ---------------------------------------------------------------- registry and runner
 
-def _register(key, name, description, model, source, scope, runner, needs_references=False):
+def _valid_rows(inputs, model):
+    """Rows of `inputs["readings"]` that validate on their own; used when the whole form does not."""
+    rows = inputs.get("readings") if isinstance(inputs, dict) else None
+    if not isinstance(rows, list):
+        return []
+    valid = []
+    for row in rows[:200]:
+        try:
+            valid.append(model.model_validate(row))
+        except ValidationError:
+            continue
+    return valid
+
+
+def bp_raw_alerts(inputs):
+    readings = _valid_rows(inputs, BpReading)
+    return [{"level": "emergency", "text": BP_ALERT}] if any(r.systolic > 180 or r.diastolic > 120 for r in readings) else []
+
+
+def glucose_raw_alerts(inputs):
+    values = [_mg_dl(r) for r in _valid_rows(inputs, GlucoseReading)]
+    alerts = []
+    if any(v < 54 for v in values):
+        alerts.append({"level": "emergency", "text": GLUCOSE_ALERT_LEVEL_2})
+    if any(54 <= v < 70 for v in values):
+        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_LEVEL_1})
+    return alerts
+
+
+def _register(key, name, description, model, source, scope, runner, needs_references=False, raw_alerts=None):
+    """`raw_alerts(inputs)` extracts fixed alerts from independently valid readings so an invalid
+    companion row or an unrelated field never hides an emergency line; no averages are computed."""
     FORM_TOOLS[key] = {"name": name, "description": description, "model": model, "variables": list(model.model_fields),
-                       "source": source, "scope": scope, "runner": runner, "needs_references": needs_references}
+                       "source": source, "scope": scope, "runner": runner, "needs_references": needs_references,
+                       "raw_alerts": raw_alerts}
 
 
 _register(
@@ -402,13 +440,13 @@ _register(
     "Seven-day morning and evening averages from home blood-pressure readings, with the 2017 ACC/AHA bands drawn for discussion and a standing-drop flag.",
     BpLogInputs, "https://doi.org/10.1161/HYP.0000000000000065",
     "Adults. Averages use seated readings in the 7 days ending on window_end. The 2017 ACC/AHA band is shown for discussion; it is not a diagnosis or a target.",
-    run_bp_log_summary)
+    run_bp_log_summary, raw_alerts=bp_raw_alerts)
 _register(
     "glucose_log_pattern", "Glucose log pattern",
     "Time-of-day pattern of blood-glucose readings against the ADA general goals, with an optional A1c on the ADAG line.",
     GlucoseLogInputs, "https://doi.org/10.2337/dc26-S006",
     "Non-pregnant adults. ADA general goals are drawn for discussion; your own targets may differ. Not insulin or dose advice.",
-    run_glucose_log_pattern)
+    run_glucose_log_pattern, raw_alerts=glucose_raw_alerts)
 _register(
     "medication_schedule", "Medication schedule sheet",
     "Printable morning, noon, evening, and bedtime grid for a medicine list, flagging entries that share an active ingredient.",
@@ -437,10 +475,12 @@ async def run_form_tool(key: str, inputs: Any, references=None) -> dict:
         model = info["model"].model_validate(inputs)
     except ValidationError as exc:
         errors = exc.errors(include_url=False)
+        alerts = info["raw_alerts"](inputs) if info["raw_alerts"] else []
+        extra = {"alerts": alerts} if alerts else {}
         missing = [e["loc"][0] for e in errors if e["type"] == "missing" and len(e["loc"]) == 1]
         if missing:
-            return _error(info, key, "Required inputs were not supplied.", missing_inputs=sorted(set(missing), key=missing.index))
-        return _error(info, key, f"Invalid or out-of-range input: {_first_field(errors[0]['loc'])}.")
+            return _error(info, key, "Required inputs were not supplied.", missing_inputs=sorted(set(missing), key=missing.index), **extra)
+        return _error(info, key, f"Invalid or out-of-range input: {_first_field(errors[0]['loc'])}.", **extra)
     output = await info["runner"](model, references) if info["needs_references"] else info["runner"](model)
     if "error" in output:
         return _error(info, key, output["error"], **{k: v for k, v in output.items() if k != "error"})
