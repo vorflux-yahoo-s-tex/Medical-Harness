@@ -12,6 +12,7 @@ const convert = (v, from, to) => (from === to ? v : v * (FACTOR[from]?.[to] ?? 1
 const pad = n => String(n).padStart(2, '0');
 const today = () => isoDay(new Date());
 const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+let serial = 0; // LOCAL FIX, not committed (tools-form.js is not owned by fe-sheets)
 // ---------- form engine ----------
 export function parseNumber(raw) {
   let s = raw.trim();
@@ -161,6 +162,7 @@ function makeField(spec, pfx) {
   }
   f.setError = msg => {
     const p = root.querySelector(':scope > .tool-error');
+    if (!p) return; // LOCAL FIX: group fields have no error line
     p.hidden = !msg;
     p.textContent = msg || '';
     controls.forEach(c => (msg ? c.setAttribute('aria-invalid', 'true') : c.removeAttribute('aria-invalid')));
