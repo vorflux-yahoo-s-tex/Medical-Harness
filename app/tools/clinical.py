@@ -499,9 +499,9 @@ def compute_hf_weight_zone(data):
     return result
 
 
-# NOTE: the CDC STEADI PDFs returned HTTP 403 to the build sandbox, so these wordings and the home-hazard list
-# were written from the published "Stay Independent" brochure as summarised elsewhere; check them against
-# https://www.cdc.gov/steadi/patient.html before release.
+# Wording verified against the CDC STEADI "Stay Independent" brochure
+# (https://www.cdc.gov/steadi/pdf/steadi-brochure-stayindependent-508.pdf, checked 2026-10-25).
+# The home-hazard list paraphrases the CDC "Check for Safety" brochure.
 STEADI_ITEMS = [  # key, CDC wording, points
     ("fallen_past_year", "I have fallen in the past year.", 2),
     ("uses_or_advised_cane_walker", "I use or have been advised to use a cane or walker to get around safely.", 2),
@@ -512,8 +512,8 @@ STEADI_ITEMS = [  # key, CDC wording, points
     ("trouble_stepping_up_curb", "I have some trouble stepping up onto a curb.", 1),
     ("rushes_to_toilet", "I often have to rush to the toilet.", 1),
     ("lost_feeling_in_feet", "I have lost some feeling in my feet.", 1),
-    ("medicine_causes_lightheaded_or_tired", "I take medicine that sometimes makes me feel light-headed or more tired than usual.", 1),
-    ("medicine_for_sleep_or_mood", "I take medicine to help me sleep or improve my mood.", 1),
+    ("medicine_causes_lightheaded_or_tired", "I take medication that sometimes makes me feel light-headed or more tired than usual.", 1),
+    ("medicine_for_sleep_or_mood", "I take medication to help me sleep or improve my mood.", 1),
     ("often_sad_or_depressed", "I often feel sad or depressed.", 1),
 ]
 STEADI_AT_RISK = "A score of 4 or more means you may be at risk of falling; discuss this with your doctor."
