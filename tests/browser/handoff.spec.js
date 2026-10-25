@@ -195,6 +195,50 @@ test('print media shows only the summary', async ({ page }) => {
   await expect(page.locator('dialog.handoff-dialog')).toBeHidden();
 });
 
+test('native print without the Print button keeps the normal page', async ({ page }) => {
+  await page.goto('/');
+  await answered(page);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.app-header')).toBeVisible();
+  await expect(page.locator('#handoff-print')).toBeHidden();
+  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
+});
+
+test('the print class is removed after printing so later native prints show the page', async ({ page }) => {
+  await page.addInitScript(() => { window.print = () => {}; });
+  await page.goto('/');
+  await answered(page);
+  await page.getByRole('button', { name: 'Hand this to a clinician' }).click();
+  await page.getByRole('button', { name: 'Print' }).click();
+  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.app-header')).toBeVisible();
+});
+
+test('Copy falls back to a textarea inside the dialog when the clipboard API is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const original = document.execCommand.bind(document);
+    document.execCommand = command => {
+      if (command !== 'copy') return original(command);
+      const ta = document.activeElement;
+      window.__copied = ta && ta.tagName === 'TEXTAREA' ? { text: ta.value, inDialog: !!ta.closest('dialog.handoff-dialog') } : null;
+      return !!window.__copied;
+    };
+  });
+  await page.goto('/');
+  await answered(page);
+  await page.getByRole('button', { name: 'Hand this to a clinician' }).click();
+  const copy = page.getByRole('dialog', { name: 'Hand this to a clinician' }).getByRole('button', { name: 'Copy' });
+  await copy.click();
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+  expect(await page.evaluate(() => window.__copied)).toEqual({ text: handoffText(handoff, context), inDialog: true });
+  await expect(page.locator('textarea.clipboard-fallback')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeFocused();
+});
+
 test('the handoff handler stays closed for answers without a handoff and resets with a new question', async ({ page }) => {
   await page.goto('/');
   await answered(page, { ...answer, handoff: undefined });
@@ -266,6 +310,18 @@ test('a 503 response body with a handoff shows the button, and one without does 
   const failed = { ...handoff, reason: 'review_unavailable', urgency: 'unknown' };
   await ask(page, JSON.stringify({ detail: 'Unable to complete the answer review. Please try again.', handoff: failed }), 503, 'application/json');
   await expect(page.locator('.msg.system').getByRole('button', { name: 'Hand this to a clinician' })).toBeVisible();
+  await page.locator('.msg.system').getByRole('button', { name: 'Hand this to a clinician' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Hand this to a clinician' });
+  await expect(dialog).toBeVisible();
+  const today = new Date().getFullYear();
+  await expect(dialog).not.toContainText('1970');
+  await expect(dialog.locator('.handoff-body')).toContainText(String(today));
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download .txt' }).click(),
+  ]);
+  expect(download.suggestedFilename()).toContain(`clinician-handoff-${today}-`);
+  await page.keyboard.press('Escape');
   await page.unroute('**/api/chat/stream');
   await ask(page, JSON.stringify({ detail: 'The service is busy.' }), 503, 'application/json');
   await expect(page.locator('.msg.system')).toContainText('The service is busy.');

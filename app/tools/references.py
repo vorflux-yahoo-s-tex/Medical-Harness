@@ -36,6 +36,9 @@ REFERENCE_TOOLS = {
 }
 
 OPENFDA_LABEL_URL = "https://api.fda.gov/drug/label.json"
+# Full labels run 100-300 KiB each, so the label request has its own byte budget.
+OPENFDA_LABEL_LIMIT = 5
+OPENFDA_LABEL_MAX_BYTES = 2 * 1024 * 1024
 LABEL_RATE_LIMIT_ERROR = "The label service rate limit was reached. Try again in a minute."
 LABEL_COMBINATION_ERROR = "Only combination products matched this name. Label sections are not shown because a combination product is not the same medicine."
 LABEL_SECTIONS = (
@@ -97,12 +100,12 @@ class ReferenceTools:
                 return {**result, "status": "unavailable", "error": LABEL_RATE_LIMIT_ERROR}
             return {**result, "status": "unavailable", "error": "Reference lookup could not be completed. No conclusion can be drawn from missing results."}
 
-    async def _get(self, url, params, not_found_ok=False):
+    async def _get(self, url, params, not_found_ok=False, max_bytes=262144):
         async with self.client.stream("GET", url, params=params) as response:
             if not_found_ok and response.status_code == 404:
                 return None
             response.raise_for_status()
-            payload = await bounded_json(response)
+            payload = await bounded_json(response, max_bytes=max_bytes)
         if not isinstance(payload, dict):
             raise ValueError("Invalid reference response")
         return payload
@@ -111,10 +114,10 @@ class ReferenceTools:
         api_key = get_settings().openfda_api_key
         payload = None
         for field in ("generic_name", "brand_name"):
-            params = {"search": f'openfda.{field}:"{query}"', "sort": "effective_time:desc", "limit": 10}
+            params = {"search": f'openfda.{field}:"{query}"', "sort": "effective_time:desc", "limit": OPENFDA_LABEL_LIMIT}
             if api_key:
                 params["api_key"] = api_key
-            payload = await self._get(OPENFDA_LABEL_URL, params, not_found_ok=True)
+            payload = await self._get(OPENFDA_LABEL_URL, params, not_found_ok=True, max_bytes=OPENFDA_LABEL_MAX_BYTES)
             if payload is not None:
                 break
         rows = payload.get("results", []) if payload else []
@@ -159,6 +162,16 @@ class ReferenceTools:
             return ""
 
     @staticmethod
+    def _single_ingredient(openfda):
+        """True only when the label metadata establishes exactly one active substance; otherwise fail closed."""
+        generic, substances = openfda.get("generic_name"), openfda.get("substance_name")
+        if not isinstance(generic, list) or len(generic) != 1 or not isinstance(generic[0], str):
+            return False
+        if not isinstance(substances, list) or len(substances) != 1 or not isinstance(substances[0], str):
+            return False
+        return not re.search(r",|;|/| AND | WITH | PLUS ", f" {generic[0].upper()} ")
+
+    @staticmethod
     def _select_label(rows, query):
         """Pick one single-ingredient label: exact name match first, then the earliest (newest) row."""
         name = " ".join(query.upper().split())
@@ -166,9 +179,9 @@ class ReferenceTools:
         matches = []
         for row in rows:
             openfda = row.get("openfda")
-            generic = openfda.get("generic_name") if isinstance(openfda, dict) else None
-            if not isinstance(generic, list) or len(generic) != 1 or not isinstance(generic[0], str) or " AND " in generic[0].upper():
+            if not isinstance(openfda, dict) or not ReferenceTools._single_ingredient(openfda):
                 continue
+            generic = openfda["generic_name"]
             names = [generic[0].upper()] + [value.upper() for value in openfda.get("brand_name", []) if isinstance(value, str)]
             if any(pattern.search(value) for value in names):
                 matches.append((row, name in names))

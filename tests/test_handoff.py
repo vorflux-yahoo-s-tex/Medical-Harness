@@ -8,7 +8,7 @@ from app.handoff import (
 )
 from app.pipeline import AgentPipeline, CLARIFICATION_INTRO, ReviewUnavailable
 from app.schemas import Handoff
-from tests.test_pipeline import FakeEvidence, FakeLLM, SAFETY_KEY, TRIAGE_KEY, TOOLS_KEY, ANATOMY_KEY, make_pipeline
+from tests.test_pipeline import EXTRACT_KEY, FakeEvidence, FakeLLM, SAFETY_KEY, TRIAGE_KEY, TOOLS_KEY, ANATOMY_KEY, make_pipeline
 
 STEP_NAMES = ["triage", "tools", "evidence", "draft", "review"]
 SECRET = "my private sentence about zorblax"
@@ -88,11 +88,21 @@ class TestReasons:
         assert h["calculations"][0]["missing_inputs"] == ["height_cm"]
         assert result["tool_results"][0]["missing_inputs"] == ["height_cm"]
 
-    async def test_missing_reference_input_drops_the_tool(self):
+    async def test_missing_reference_input_drops_the_tool_and_marks_tools_partial(self):
         p = make_pipeline({"action": "answer"}, tools={"selected_tools": ["pubmed_search"]}, extract={})
         result = await p.run(["Any research on migraine?"], "c")
         assert result["tool_results"] == []
-        assert result["handoff"]["reason"] == "answer_available"
+        h = result["handoff"]
+        assert h["reason"] == "answer_available"
+        assert (h["trace"]["steps"][1]["status"], h["trace"]["steps"][1]["detail"]) == ("fallback", "partial")
+
+    async def test_failed_variable_extraction_marks_tools_partial(self):
+        p = make_pipeline({"action": "answer"}, tools={"selected_tools": ["bmi"]})
+        p.llm.script[EXTRACT_KEY] = "not json"
+        result = await p.run(["What is my BMI?"], "c")
+        assert result["tool_results"] == []
+        step = result["handoff"]["trace"]["steps"][1]
+        assert (step["status"], step["detail"]) == ("fallback", "partial")
 
     async def test_clarification_limit_beats_tool_input_missing(self):
         p = make_pipeline({"action": "ask", "follow_up_questions": ["More?"]},

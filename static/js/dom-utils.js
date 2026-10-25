@@ -169,7 +169,7 @@ function renderAnswerBody(raw, articles, msgId) {
   });
   return renderMarkdown(raw, { linkifyCitations: articles !== void 0 ? linkify : null });
 }
-async function copyToClipboard(text) {
+async function copyToClipboard(text, { host, returnFocus } = {}) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
@@ -177,18 +177,20 @@ async function copyToClipboard(text) {
     }
   } catch {
   }
+  const ta = document.createElement("textarea");
   try {
-    const ta = document.createElement("textarea");
     ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
+    ta.className = "clipboard-fallback";
+    ta.setAttribute("aria-hidden", "true");
+    (host || document.body).appendChild(ta);
     ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
+    return document.execCommand("copy");
   } catch {
     return false;
+  } finally {
+    ta.remove();
+    const target = returnFocus || null;
+    if (target && typeof target.focus === "function") target.focus();
   }
 }
 function rafThrottle(fn) {

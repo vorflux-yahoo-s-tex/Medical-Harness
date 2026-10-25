@@ -1,4 +1,5 @@
 import asyncio
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -69,9 +70,12 @@ SET_ID = "fdbfe194-b845-42c5-bb87-a48118bc72e7"
 COMBO_SET_ID = "0b6c6d4c-2f7e-4b7e-9c43-6d0d2c1b1a11"
 
 
-def label_row(generic=("METFORMIN HYDROCHLORIDE",), set_id=SET_ID, effective="20250314", **sections):
+def label_row(generic=("METFORMIN HYDROCHLORIDE",), set_id=SET_ID, effective="20250314", substances=None, **sections):
+    if substances is None:
+        substances = [part.strip() for name in generic for part in re.split(r" AND |,", name)]
     return {"set_id": set_id, "effective_time": effective,
-            "openfda": {"generic_name": list(generic), "brand_name": ["Glucophage"], "dosage_form": ["TABLET"]}, **sections}
+            "openfda": {"generic_name": list(generic), "substance_name": substances, "brand_name": ["Glucophage"],
+                        "dosage_form": ["TABLET"]}, **sections}
 
 
 async def label_lookup(responder, query="metformin", api_key="", tools=None):
@@ -121,7 +125,7 @@ async def test_label_sections_select_single_ingredient_over_newer_combination():
     assert str(requests[0].url).startswith("https://api.fda.gov/drug/label.json")
     assert params["search"] == 'openfda.generic_name:"metformin"'
     assert params["sort"] == "effective_time:desc"
-    assert params["limit"] == "10"
+    assert params["limit"] == "5"
 
 
 async def test_label_sections_use_warnings_for_otc_labels_and_report_no_interactions_section():
@@ -272,3 +276,31 @@ async def test_emergency_never_calls_reference_tools():
     result = await pipeline.run(["Synthetic emergency"], "test")
     assert result["emergency"] is True
     assert not result["tool_results"]
+
+
+async def test_label_sections_fail_closed_on_comma_combinations_and_missing_substances():
+    payload = {"results": [
+        label_row(("ACETAMINOPHEN, ASPIRIN, CAFFEINE",), COMBO_SET_ID, "20260101", warnings=["Combo"]),
+        label_row(("ACETAMINOPHEN",), SET_ID, "20250101", substances=["ACETAMINOPHEN", "CAFFEINE"], warnings=["Two substances"]),
+        label_row(("ACETAMINOPHEN",), SET_ID, "20240101", substances=[], warnings=["No substances"]),
+    ]}
+    result, _, tools = await label_lookup(lambda request: httpx.Response(200, json=payload), query="acetaminophen")
+    await tools.aclose()
+    assert result["status"] == "empty"
+    assert result["combination_only"] is True
+
+
+async def test_label_sections_accept_full_size_labels_within_their_own_budget():
+    row = label_row(warnings=["Big label"], description=["x" * 600_000])
+    payload = {"results": [row]}
+    result, _, tools = await label_lookup(lambda request: httpx.Response(200, json=payload))
+    await tools.aclose()
+    assert result["status"] == "available"
+    assert result["items"][0]["tldr"] == "Big label"
+
+
+async def test_label_sections_still_reject_payloads_over_the_label_budget():
+    payload = {"results": [label_row(warnings=["Big"], description=["x" * (2 * 1024 * 1024 + 10)])]}
+    result, _, tools = await label_lookup(lambda request: httpx.Response(200, json=payload))
+    await tools.aclose()
+    assert result["status"] == "unavailable"

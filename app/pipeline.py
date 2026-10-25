@@ -245,7 +245,9 @@ class AgentPipeline:
                 trace.finish("tools", "failed", "selection_failed")
             elif not tools_info.get("selected"):
                 trace.finish("tools", "skipped")
-            elif any(r.get("error") or r.get("status") == "unavailable" for r in tool_results):
+            elif len(tool_results) < tools_info["selected"] or any(
+                r.get("error") or r.get("status") == "unavailable" for r in tool_results
+            ):
                 trace.finish("tools", "fallback", "partial")
             else:
                 trace.finish("tools", "ok", f"selected={tools_info['selected']}")
@@ -254,9 +256,12 @@ class AgentPipeline:
             primary = list(evidence_result.get("articles", []))
             extras = self._reference_sources(tool_results)
             if extras:
-                sources = primary[:max(0, self.max_evidence_articles - len(extras))]
-                seen = {item.get("url") for item in sources}
-                evidence_result["articles"] = sources + [item for item in extras if item["url"] not in seen]
+                # Label excerpts share one DailyMed URL per product, so resolve overlaps against the
+                # primary list first and only then allocate the remaining slots to primary sources.
+                extra_urls = {item["url"] for item in extras}
+                primary_kept = [item for item in primary if item.get("url") not in extra_urls]
+                sources = primary_kept[:max(0, self.max_evidence_articles - len(extras))]
+                evidence_result["articles"] = sources + extras
                 evidence_result["response"] = ""
             evidence_result["articles"] = evidence_result.get("articles", [])[:self.max_evidence_articles]
             articles = evidence_result["articles"]

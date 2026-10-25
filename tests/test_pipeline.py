@@ -566,12 +566,25 @@ class TestLabelSourceMerge:
         result = await p.run(["Explain"], "c")
         assert result["evidence_status"] == "unavailable"
 
-    async def test_url_duplicates_of_primary_are_dropped(self):
+    async def test_primary_duplicates_of_label_urls_yield_to_the_excerpt(self):
         label = label_item("boxed_warning")
-        primary = [{"title": "Same", "year": 2024, "journal": "J", "tldr": "t", "url": label["url"]}]
+        primary = [{"title": "Same", "year": 2024, "journal": "J", "tldr": "t", "url": label["url"]},
+                   {"title": "Other", "year": 2024, "journal": "J", "tldr": "t", "url": "https://p/other"}]
         p = reference_pipeline([{"tool": "FDA label sections", "status": "available", "items": [label]}], articles=primary)
         result = await p.run(["Explain"], "c")
-        assert [a["title"] for a in result["articles"]] == ["Same"]
+        assert [a["title"] for a in result["articles"]] == ["Other", label["title"]]
+
+    async def test_full_capacity_overlap_keeps_every_label_section_and_fills_with_primary(self):
+        sections = [label_item(f"s{i}") for i in range(5)]
+        shared = sections[0]["url"]
+        primary = [{"title": f"P{i}", "year": 2023, "journal": "J", "tldr": "t", "url": shared if i < 3 else f"https://p/{i}"}
+                   for i in range(8)]
+        p = reference_pipeline([{"tool": "FDA label sections", "status": "available", "items": sections}], articles=primary)
+        result = await p.run(["Explain"], "c")
+        titles = [a["title"] for a in result["articles"]]
+        assert len(titles) == p.max_evidence_articles
+        assert titles[p.max_evidence_articles - 5:] == [s["title"] for s in sections]
+        assert titles[:p.max_evidence_articles - 5] == [f"P{i}" for i in range(3, 3 + p.max_evidence_articles - 5)]
 
 
 class TestEvidenceFailure:

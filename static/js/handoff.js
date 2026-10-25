@@ -18,7 +18,9 @@ const plain = value => (value && typeof value === 'object' && !Array.isArray(val
 const NONE = 'None for this question.';
 
 function when(context) {
-  const date = new Date(plain(context).receivedAt);
+  const { receivedAt } = plain(context);
+  if (receivedAt === null || receivedAt === undefined || receivedAt === '') return new Date();
+  const date = new Date(receivedAt);
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
@@ -137,6 +139,7 @@ let currentDate = new Date();
 let copyTimer;
 
 function clearPrintSheet() {
+  document.body.classList.remove('printing-handoff');
   const sheet = document.getElementById('handoff-print');
   if (!sheet) return;
   sheet.textContent = '';
@@ -149,7 +152,10 @@ function announce(message) {
 }
 
 async function copyHandoff(button) {
-  if (!(await copyToClipboard(currentText))) { announce('Copy failed. Select the text and copy it manually.'); return; }
+  // The fallback textarea must live inside the open modal dialog; nodes under an open
+  // <dialog> are inert, so a body-mounted textarea cannot take the selection.
+  const copied = await copyToClipboard(currentText, { host: dialog, returnFocus: button });
+  if (!copied) { announce('Copy failed. Select the text and copy it manually.'); return; }
   const label = button.querySelector('span');
   clearTimeout(copyTimer);
   button.classList.add('copied');
@@ -175,6 +181,7 @@ function printHandoff() {
   if (!sheet) return;
   sheet.textContent = currentText;
   sheet.hidden = false;
+  document.body.classList.add('printing-handoff');
   window.addEventListener('afterprint', clearPrintSheet, { once: true });
   window.print();
 }

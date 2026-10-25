@@ -377,8 +377,10 @@ dialog::backdrop { background: #00000080; backdrop-filter: blur(3px); }
   .handoff-text { font-size: 13px; }
   .trace-row { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 8px; }
 }
+.clipboard-fallback { position: fixed; inset: 0 auto auto 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; }
 @media print {
-  body > :not(#handoff-print) { display: none !important; }
-  body { display: block; height: auto; background: #fff; color: #000; }
-  #handoff-print { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font: 12pt/1.5 system-ui; color: #000; background: #fff; }
+  /* Only the handoff Print button adds .printing-handoff; native Ctrl/Cmd+P prints the normal page. */
+  body.printing-handoff > :not(#handoff-print) { display: none !important; }
+  body.printing-handoff { display: block; height: auto; background: #fff; color: #000; }
+  body.printing-handoff #handoff-print { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font: 12pt/1.5 system-ui; color: #000; background: #fff; }
 }
