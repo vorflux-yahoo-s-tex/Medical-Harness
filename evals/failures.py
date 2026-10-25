@@ -20,10 +20,10 @@ from pathlib import Path
 
 import httpx
 
-from app.handoff import LIMITATION_COMBINATION, LIMITATION_UNREACHABLE, citation_indices
+from app.handoff import LIMITATION_COMBINATION, LIMITATION_EMPTY, LIMITATION_UNREACHABLE, citation_indices
 from app.pipeline import CLARIFICATION_INTRO, AgentPipeline, cache_scope
 from app.schemas import Handoff
-from app.tools.references import ReferenceTools
+from app.tools.references import RXNORM_RATE_LIMIT_ERROR, ReferenceTools
 from evals.doubles import (
     EXTRACT_KEY, INJECTION_TEXT, SAFETY_KEY, TOOLS_KEY, TRIAGE_KEY,
     ScriptedEvidence, ScriptedLLM, default_script, mock_reference_client,
@@ -31,6 +31,7 @@ from evals.doubles import (
 
 REGENERATE = "uv run python -m evals.failures --out docs/FAILURE_MODES.md"
 LABEL_TOOL = "FDA label sections"
+RXNORM_TOOL = "RxNorm ingredients"
 SET_ID = "0b1b0b1b-0000-4000-8000-000000000001"
 EMERGENCY_STEPS = {"triage": "ok", "tools": "skipped", "evidence": "skipped", "draft": "skipped", "review": "skipped"}
 ANSWER_STEPS = {"triage": "ok", "evidence": "ok", "draft": "ok", "review": "ok"}
@@ -158,6 +159,68 @@ def build_reference_circuit_open() -> Scenario:
     return _label_scenario(lambda request: httpx.Response(200, json={"results": []}), circuit_open=True, checks=checks)
 
 
+def _rxnorm_scenario(responder, checks) -> Scenario:
+    client = mock_reference_client(responder)
+    return _scenario(
+        {"action": "answer"}, ["What active ingredient is in Tylenol?"],
+        tools={"selected_tools": ["rxnorm_ingredients"]}, extract={"query": "Tylenol"},
+        client=client, references=ReferenceTools(client=client), checks=checks,
+    )
+
+
+def _rxnorm_tool(run: Run) -> dict:
+    return next((r for r in (run.result or {}).get("tool_results", []) if r.get("tool") == RXNORM_TOOL), {})
+
+
+def _rxnorm_unavailable_checks(run: Run) -> dict[str, bool]:
+    tool = _rxnorm_tool(run)
+    reference = next((r for r in run.handoff["references"] if r["tool"] == RXNORM_TOOL), {})
+    return {
+        "tool_unavailable": tool.get("status") == "unavailable" and tool.get("items") == [] and reference.get("status") == "unavailable",
+        "not_a_clinical_negative": LIMITATION_UNREACHABLE.format(tool=RXNORM_TOOL) in run.handoff["limitations"],
+        "ingredients_never_become_sources": not any(a.get("title") == "acetaminophen" for a in run.result["articles"]),
+        "sources_still_present": bool(run.result["articles"]),
+    }
+
+
+def build_rxnorm_timeout() -> Scenario:
+    def responder(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("synthetic read timeout", request=request)
+
+    def checks(run: Run) -> dict[str, bool]:
+        return {**_rxnorm_unavailable_checks(run), "match_lookup_only": [r.url.path for r in run.scenario.client.requests] == ["/REST/rxcui.json"]}
+    return _rxnorm_scenario(responder, checks)
+
+
+def build_rxnorm_429() -> Scenario:
+    def checks(run: Run) -> dict[str, bool]:
+        return {
+            **_rxnorm_unavailable_checks(run),
+            "rate_limit_message": _rxnorm_tool(run).get("error") == RXNORM_RATE_LIMIT_ERROR,
+            "circuit_failure_counted": run.scenario.pipeline.references.circuits["rxnorm_ingredients"].failures == 1,
+            "single_request": len(run.scenario.client.requests) == 1,
+        }
+    return _rxnorm_scenario(lambda request: httpx.Response(429, json={}), checks)
+
+
+def build_rxnorm_malformed() -> Scenario:
+    def responder(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/rxcui.json"):
+            return httpx.Response(200, json={"idGroup": {"rxnormId": ["abc"]}})
+        return httpx.Response(500, json={})
+
+    def checks(run: Run) -> dict[str, bool]:
+        tool = _rxnorm_tool(run)
+        return {
+            "tool_empty": tool.get("status") == "empty" and tool.get("items") == [],
+            "limitation_stated": LIMITATION_EMPTY.format(tool=RXNORM_TOOL) in run.handoff["limitations"],
+            "invalid_rxcui_makes_no_second_request": len(run.scenario.client.requests) == 1,
+            "circuit_not_charged": run.scenario.pipeline.references.circuits["rxnorm_ingredients"].failures == 0,
+            "sources_still_present": bool(run.result["articles"]),
+        }
+    return _rxnorm_scenario(responder, checks)
+
+
 def build_source_excerpt_injection() -> Scenario:
     def checks(run: Run) -> dict[str, bool]:
         llm = run.scenario.llm
@@ -260,6 +323,15 @@ FAULT_CASES: list[dict] = [
           "answer", "answer_available", "routine",
           {**ANSWER_STEPS, "tools": "fallback:partial"},
           "Zero HTTP requests are made; the tool is `unavailable` and the reviewed answer is still sent."),
+    _case("rxnorm_timeout", "The RxNorm match request raises a read timeout.", build_rxnorm_timeout,
+          "answer", "answer_available", "routine", {**ANSWER_STEPS, "tools": "fallback:partial"},
+          "The reviewed answer is still sent from the evidence provider; the tool is `unavailable` and the handoff says it is not a clinical negative."),
+    _case("rxnorm_429", "The RxNorm service answers HTTP 429 (rate limit).", build_rxnorm_429,
+          "answer", "answer_available", "routine", {**ANSWER_STEPS, "tools": "fallback:partial"},
+          "Same as a timeout with the rate-limit message; the failure is counted by the circuit breaker and no retry is made."),
+    _case("rxnorm_malformed", "The RxNorm match response holds an invalid RxCUI.", build_rxnorm_malformed,
+          "answer", "answer_available", "routine", {**ANSWER_STEPS, "tools": "ok:selected=1"},
+          "The identifier is rejected before any second request; the tool is `empty` and the handoff says that is not evidence of safety."),
     _case("source_excerpt_injection", "A source excerpt contains instruction-injection text.", build_source_excerpt_injection,
           "answer", "answer_available", "routine", ANSWER_STEPS,
           "The text reaches the model only inside a user-role evidence block; it is absent from every system prompt, the answer, and the handoff."),
