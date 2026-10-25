@@ -20,7 +20,7 @@ This file is the short starting point for coding agents. Follow the user's curre
 - `app/tools/forms.py`: form-only tools whose inputs are lists (`bp_log_summary`, `glucose_log_pattern`, `medication_schedule`), run through `run_form_tool`. `app/tools/sheets.py`: the fixed tiers of the when-to-call sheet.
 - `GET /api/tools` and `POST /api/tools/{key}` (in `app/api/routes.py`) run calculators and form tools with no model call; reference tools are not exposed there. `TOOL_RATE_LIMIT_REQUESTS` is that endpoint's own per-minute limit.
 - `static/index.html`, `static/js/`, `static/css/`: browser sources; `npm run build` updates checked-in hashed bundles in `static/dist/` The build also updates `static/build.json`; commit it with the generated bundles.
-- `static/js/tools*.js` (the Tools panel, catalogue, child, form, log, and sheet modules), `charts.js` (SVG charts drawn from result numbers), `local-log.js` (opt-in browser-local logs), `print.js` (printable sheets): the patient-tool frontend. Tool keys are the backend keys; do not rename them.
+- `static/js/tools*.js` (the Tools panel, `tools-catalog.js`, and the child, form, log, and sheet group modules), `charts.js` (SVG charts drawn from result numbers), `local-log.js` (opt-in browser-local logs), `print.js` (printable sheets): the patient-tool frontend. Tool keys are the backend keys; do not rename them.
 - `static/assets/atlas/`: focused BodyParts3D-derived scenes; preserve attribution in `NOTICE.md` and the viewer. Validate with `npm run check:anatomy`.
 - `app/tools/references.py`: bounded DailyMed and Europe PMC lookups.
 - `app/tools/education.py` and `static/js/education-catalog.js`: allowed educational guide IDs and browser titles.
@@ -44,6 +44,7 @@ This file is the short starting point for coding agents. Follow the user's curre
 - For pipeline or prompt changes: add or update tests for emergency, clarification, evidence failure, and review failure where relevant.
 - For configuration changes: update `.env.example` and [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 - For visual changes: inspect desktop and narrow mobile widths in both themes and update the screenshots when the published UI changes.
+- For a new patient tool: add a `tools-catalog.js` entry, a definition in a group file (`tools-child.js`, `tools-logs.js`, or `tools-sheets.js`), a browser spec, and a desktop-light and mobile-dark screenshot pair under `docs/media/`. Keep the tool key equal to the backend key.
 - Run `uv run pytest -q` and `git diff --check` before committing.
 - For browser changes, run `npm run build`, `npm run check:anatomy`, and `npm run test:browser`. Keep generated bundles in the same commit as their source.
 
