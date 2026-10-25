@@ -128,7 +128,7 @@ class WhenToCallSheet(BaseModel):
     emergency_signs: list[str]
     emergency_line: str
     routine_lines: list[str]
-    middle_tier_source: Literal["answer"]
+    middle_tier_source: Literal["answer", "unavailable"]
 
 
 class ChatResponse(BaseModel):

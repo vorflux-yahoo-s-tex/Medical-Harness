@@ -723,16 +723,17 @@ class TestWhenToCallMode:
         assert result["type"] == "conversation" and result["answer"] == CONVERSATION_REPLIES["unclear"]
         assert result.get("sheet") is None and p.evidence.conversations == []
 
-    async def test_unavailable_evidence_writes_no_sheet(self):
+    async def test_unavailable_evidence_keeps_the_fixed_tiers_but_marks_the_middle_tier_unavailable(self):
         p = sheet_pipeline()
         p.evidence = FakeEvidence(articles=[])
         events = await collect_mode(p, [SHEET_TURN])
         result = events[-1][1]
         assert result["evidence_status"] == "unavailable" and result["articles"] == []
-        assert result.get("sheet") is None
+        assert result["sheet"]["middle_tier_source"] == "unavailable"
+        assert result["sheet"]["emergency_signs"] and result["sheet"]["routine_lines"]
         assert not drafting_systems(p)
         assert not any(e[0] == "answer_chunk" for e in events)
-        assert LIMITATION_SHEET not in result["handoff"]["limitations"]
+        assert LIMITATION_SHEET in result["handoff"]["limitations"]
 
     async def test_review_failure_publishes_nothing(self):
         p = sheet_pipeline(safety={"is_safe": False})

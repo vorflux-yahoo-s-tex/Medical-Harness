@@ -61,7 +61,7 @@ In sheet mode the `answer` result also carries `sheet`, which is `null` or absen
 }
 ```
 
-`emergency_signs`, `emergency_line`, and `routine_lines` are fixed server constants (`app/tools/sheets.py`; the signs restate the triage red flags in patient wording). The reviewed, cited middle tier ("Call your care team today if") is `answer`, with its sources in `articles`; `middle_tier_source` names that field. The handoff's `limitations` adds a line stating that the middle tier was written from retrieved sources and reviewed, that the other tiers are fixed, and that names, numbers, and personal thresholds were added in the browser and never sent.
+`emergency_signs`, `emergency_line`, and `routine_lines` are fixed server constants (`app/tools/sheets.py`; the signs restate the triage red flags in patient wording). The reviewed, cited middle tier ("Call your care team today if") is `answer`, with its sources in `articles`; `middle_tier_source` names that field. When evidence is unavailable the result still carries the fixed tiers with `middle_tier_source: "unavailable"` and no `answer` text; the browser prints blank ruled lines for the middle tier. The handoff's `limitations` adds a line stating that the middle tier was written from retrieved sources and reviewed, that the other tiers are fixed, and that names, numbers, and personal thresholds were added in the browser and never sent.
 
 ### Time and country context
 

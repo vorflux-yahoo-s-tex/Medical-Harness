@@ -291,7 +291,8 @@ class AgentPipeline:
                 yield ("result", _empty_result(
                     answer="I couldn’t retrieve supporting medical sources for this question. Please try again, or discuss your symptoms with a healthcare professional. If symptoms are severe or rapidly worsening, seek urgent care.",
                     evidence_status="unavailable",
-                    handoff=handoff("evidence_unavailable", tool_results=tool_results),
+                    handoff=handoff("evidence_unavailable", tool_results=tool_results, sheet=sheet_mode),
+                    **({"sheet": build_when_to_call_sheet("unavailable")} if sheet_mode else {}),
                 ))
                 return
 

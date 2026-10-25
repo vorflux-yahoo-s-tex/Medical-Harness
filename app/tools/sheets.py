@@ -26,12 +26,16 @@ ROUTINE_LINES = (
 )
 
 
-def build_when_to_call_sheet() -> dict:
-    """The sheet envelope: fixed tiers plus a pointer to where the cited middle tier lives."""
+def build_when_to_call_sheet(middle_tier_source: str = "answer") -> dict:
+    """The sheet envelope: fixed tiers plus a pointer to where the cited middle tier lives.
+
+    ``middle_tier_source`` is ``"answer"`` when the reviewed, cited tier is present and
+    ``"unavailable"`` when evidence could not be retrieved; the fixed tiers are returned either way.
+    """
     return {
         "kind": "when_to_call",
         "emergency_signs": list(EMERGENCY_SIGNS),
         "emergency_line": EMERGENCY_LINE,
         "routine_lines": list(ROUTINE_LINES),
-        "middle_tier_source": "answer",
+        "middle_tier_source": middle_tier_source,
     }
