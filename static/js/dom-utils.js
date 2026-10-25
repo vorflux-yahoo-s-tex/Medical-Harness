@@ -228,11 +228,12 @@ const TOOL_FIELD_LABELS = {
   grade: "MRC Grade",
   description: "Description"
 };
-const TOOL_SKIP_FIELDS = /* @__PURE__ */ new Set(["tool", "recommendation", "error", "source", "inputs"]);
+const TOOL_SKIP_FIELDS = /* @__PURE__ */ new Set(["tool", "key", "recommendation", "error", "source", "inputs", "alerts", "hard_stop"]);
 function toolCardRows(tr, headlineKey) {
   const rows = [];
   for (const [key, val] of Object.entries(tr)) {
     if (TOOL_SKIP_FIELDS.has(key) || key === headlineKey || val === void 0 || val === null) continue;
+    if (typeof val === "object" && !(Array.isArray(val) && val.every((item) => typeof item !== "object"))) continue;
     const label = TOOL_FIELD_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const value = String(val);
     rows.push([label, value]);
@@ -244,6 +245,7 @@ function toolHeadline(tr) {
   if (typeof tr.score === "number") return ["score", tr.score, "Score"];
   if (typeof tr.bmi === "number") return ["bmi", tr.bmi, "BMI"];
   if (typeof tr.grade === "number") return ["grade", tr.grade, "Grade / 5"];
+  if (typeof tr.summary === "string" && tr.summary) return ["summary", tr.summary, "Summary"];
   return [null, null, null];
 }
 function inputsText(inputs) {
@@ -264,6 +266,55 @@ function claimSupportText(support) {
   if (support.uncited_sources?.length) parts.push(`not cited: ${support.uncited_sources.join(", ")}`);
   return parts.join(" \xB7 ");
 }
+function stamp(date) {
+  const day = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `${day}, ${time}${zone ? ` (${zone})` : ""}`;
+}
+function isoDay(date) {
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+function downloadText(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.hidden = true;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1e3);
+}
+async function readSse(response, onEvent) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (; ; ) {
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replace(/\r/g, "");
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+      if (done && buffer.trim()) parts.push(buffer);
+      for (const part of parts) {
+        let eventType = "";
+        const lines = [];
+        for (const line of part.split("\n")) {
+          if (line.startsWith("event:")) eventType = line.slice(6).trim();
+          else if (line.startsWith("data:")) lines.push(line.slice(5).trimStart());
+        }
+        if (!eventType || !lines.length) continue;
+        if (onEvent(eventType, JSON.parse(lines.join("\n"))) === true) return;
+      }
+      if (done) return;
+    }
+  } finally {
+    await reader.cancel().catch(() => {
+    });
+  }
+}
 function safeUrl(value) {
   try {
     const url = new URL(value);
@@ -276,14 +327,18 @@ export {
   TOOL_FIELD_LABELS,
   claimSupportText,
   copyToClipboard,
+  downloadText,
   escapeAttr,
   escapeHtml,
   inputsText,
+  isoDay,
   rafThrottle,
+  readSse,
   renderAnswerBody,
   renderMarkdown,
   riskTone,
   safeUrl,
+  stamp,
   toolCardRows,
   toolHeadline,
   traceStepText
