@@ -432,7 +432,7 @@ label.tool-choice { display: flex; align-items: center; gap: 10px; min-height: 4
 .tool-row { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 2px; }
 .tool-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 10px; }
 .tool-row-head h4 { margin: 0; font-size: 14px; font-weight: 550; }
-.tool-add, .tool-remove, .tool-retry { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 14px; font-size: 13px; background: transparent; }
+.tool-add, .tool-remove, .tool-retry { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; padding: 0 14px; font-size: 13px; background: transparent; white-space: nowrap; }
 .tool-retry { min-height: 36px; padding: 0 12px; }
 .tool-add svg, .tool-remove svg { width: 16px; height: 16px; }
 .tool-submit { margin: 20px 0 0; }

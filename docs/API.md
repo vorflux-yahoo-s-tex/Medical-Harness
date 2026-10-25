@@ -183,7 +183,7 @@ PubMed abstracts and official label sections (any reference item with a `tldr` e
 
 ## Tools endpoint
 
-The patient tools run without a language model. `GET /api/tools` lists them and `POST /api/tools/{key}` runs one. Both live under the `/api/tools` rate limit (`TOOL_RATE_LIMIT_REQUESTS` per client per window, counted separately from `/api/chat`). Reference tools (`drug_labels`, `pubmed_search`, `label_sections`, `rxnorm_ingredients`) are not exposed here; they return 404 like any unknown key. The server logs the tool key and one of `ok`, `error`, `unavailable`, never the inputs.
+The patient tools run without a language model. `GET /api/tools` lists them and `POST /api/tools/{key}` runs one. The `POST` requests count toward the `/api/tools` rate limit (`TOOL_RATE_LIMIT_REQUESTS` per client per window, counted separately from `/api/chat`); the listing is not counted. Reference tools (`drug_labels`, `pubmed_search`, `label_sections`, `rxnorm_ingredients`) are not exposed here; they return 404 like any unknown key. The server logs the tool key and one of `ok`, `error`, `unavailable`, never the inputs.
 
 `GET /api/tools` returns `{"tools": [{"key", "name", "description", "variables", "source", "scope", "kind"}]}`, where `kind` is `calculator` (the 18 tools in `app/tools/clinical.py` and `growth.py`) or `form` (`bp_log_summary`, `glucose_log_pattern`, `medication_schedule`). `variables` lists the input field names.
 
