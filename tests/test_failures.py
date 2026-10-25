@@ -5,7 +5,8 @@ from evals.failures import FAULT_CASES, render_markdown, run_all
 REPORT = Path(__file__).resolve().parents[1] / "docs" / "FAILURE_MODES.md"
 EXPECTED_IDS = [
     "evidence_timeout", "evidence_empty", "triage_malformed_json", "review_timeout", "review_unsafe_twice",
-    "answer_over_budget", "reference_5xx", "reference_circuit_open", "source_excerpt_injection",
+    "answer_over_budget", "reference_5xx", "reference_circuit_open", "rxnorm_timeout", "rxnorm_429", "rxnorm_malformed",
+    "source_excerpt_injection",
     "clarification_limit", "label_combination_only", "tool_input_missing", "emergency",
 ]
 
