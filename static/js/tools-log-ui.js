@@ -4,6 +4,10 @@ import { TOOL_ICON } from './tool-icons.js';
 import { downloadText, escapeAttr as attr, escapeHtml as esc, isoDay } from './dom-utils.js';
 import * as store from './local-log.js';
 
+const PRIVACY = "Saved only in this browser on this device. Nothing is sent to our server unless you press 'Show the summary', which sends these readings to calculate the result and nothing else. Anyone who uses this browser can see them.";
+const NO_STORAGE = 'Storage is not available in this browser; the log stays until you close this page.';
+const UNSAVED = 'Not saved: this log disappears when you close the page.';
+
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const shortWhen = e => `${new Date(...e.date.split('-').map((n, i) => (i === 1 ? n - 1 : +n))).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${e.time ? ` ${e.time}` : ''}`;
 let serial = 0;

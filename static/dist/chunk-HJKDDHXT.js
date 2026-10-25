@@ -1,0 +1,1 @@
+import{a as e,b as s,c as n,d as r,e as o,f as t,g as i,h as u,i as a,j as l,k as p,l as m,m as O,n as P,o as S}from"./chunk-GHPH5SPW.js";var b=Object.fromEntries(Object.entries({back:e,moon:s,pause:n,phone:r,pill:o,play:t,plus:i,save:u,sun:a,sunrise:l,sunset:p,syringe:m,trash:O,utensils:P}).map(([c,f])=>[c,S(f)]));export{b as a};

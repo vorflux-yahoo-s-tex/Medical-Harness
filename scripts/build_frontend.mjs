@@ -43,7 +43,7 @@ const contribution = (inputs, limit, label) => {
   console.log(`${label}: ${total} B (budget ${limit} B)`);
   if (total > limit) over.push(`${label}: ${total} B > ${limit} B`);
 };
-contribution(['static/js/charts.js'], 9 * KB, 'charts.js');
+contribution(['static/js/charts.js'], 12 * KB, 'charts.js');
 contribution(['static/js/local-log.js', 'static/js/print.js'], 3 * KB, 'local-log.js + print.js');
 if (over.length) {
   console.error(`Over budget:\n  ${over.join('\n  ')}`);

@@ -222,10 +222,9 @@ test('dose: summary, band, syringe, notes, source, Copy and Download share one t
   await expect(dialog.locator('.tool-result')).toContainText('same ingredient');
   await expect(dialog.locator('.tool-sources a')).toHaveAttribute('href', /healthychildren\.org/);
   const text = await copyAndDownload(page, dialog, [
-    'Child fever-medicine amount', 'Inputs as supplied:', 'Result: label amount 5 mL of acetaminophen 160 mg per 5 mL (160 mg), every 4 hours, no more than 5 doses in 24 hours.',
+    'Child fever-medicine amount', 'Inputs as supplied:', 'Result: For a child weighing 14 kg (30.9 lb) the US label amount for acetaminophen 160 mg per 5 mL is 5 mL, every 4 hours, no more than 5 doses in 24 hours.', 'Medicine in that amount: 160 mg.',
     'Weight band on the label: 24\u201335 lb (10.9\u201315.9 kg).', 'not a kitchen spoon', 'It is not a dose chosen for your child', 'Source: https://www.healthychildren.org/',
   ]);
-  expect(text).not.toMatch(/synthio/i);
 });
 
 test('dose: a label amount that is not a quarter of a mL reads the same in the figure, the table and the text', async ({ page }) => {

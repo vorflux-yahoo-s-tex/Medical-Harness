@@ -26,6 +26,12 @@ const STRENGTHS = [
   ['unknown', 'I can\u2019t find it on the label'],
 ];
 const product = r => `${r.medicine} ${String(r.concentration).replace(/mg\//, ' mg per ').replace(/(\d)mL/, '$1 mL')}`;
+// One sentence shared by the result card, the copied text and the handoff; falls back to the server summary when the product fields are absent.
+const doseSummary = r => {
+  if (r.amount_ml == null || !r.medicine || !r.concentration) return r.summary;
+  const who = r.weight_kg == null ? 'For this weight' : `For a child weighing ${num(r.weight_kg)} kg (${num(r.weight_lb)} lb)`;
+  return `${who} the US label amount for ${product(r)} is ${num(r.amount_ml)} mL, every ${hours(r.interval_hours_low, r.interval_hours_high)}, no more than ${r.max_doses_24h} doses in 24 hours.`;
+};
 const DOSE_CANNOT = 'This is the amount printed on US labels for this weight band (AAP/FDA). It is not a dose chosen for your child, it does not cover prescription products, and it cannot tell you whether medicine is needed or why the child has a fever.';
 
 // The syringe primitive rounds its label to 2 decimals; a label amount such as 1.875 mL must read the same everywhere.
@@ -56,8 +62,7 @@ const doseCheck = {
       html: exactAmount(syringe({ amount: sy.amount_ml, capacity: sy.capacity_ml, title: `Oral syringe marked at ${sy.amount_ml} mL`, desc: `An oral syringe with a ${sy.capacity_ml} mL barrel and the plunger at ${sy.amount_ml} mL, the label amount for this weight band.` }), sy.amount_ml),
       caption: 'Oral syringe \u00B7 the mark shows the label amount for this weight band \u00B7 not a picture of your product.',
     } : null;
-    const who = r.weight_kg == null ? 'For this weight' : `For a child weighing ${num(r.weight_kg)} kg (${num(r.weight_lb)} lb)`;
-    const summary = r.amount_ml == null ? r.summary : `${who} the US label amount for ${product(r)} is ${num(r.amount_ml)} mL, every ${hours(r.interval_hours_low, r.interval_hours_high)}, no more than ${r.max_doses_24h} doses in 24 hours.`;
+    const summary = doseSummary(r);
     const rows = [];
     if (r.band_low_lb != null) rows.push(['Weight band on the label', `${r.band_low_lb}\u2013${r.band_high_lb} lb (${r.band_low_kg}\u2013${r.band_high_kg} kg)`]);
     if (r.amount_mg != null) rows.push(['Medicine in that amount', `${num(r.amount_mg)} mg`]);
@@ -66,7 +71,8 @@ const doseCheck = {
   toText(r) {
     if (r.hard_stop) return `Result: no amount shown. ${r.hard_stop.title ? `${r.hard_stop.title}. ` : ''}${r.hard_stop.text}`;
     return [
-      `Result: label amount ${num(r.amount_ml)} mL of ${product(r)} (${num(r.amount_mg)} mg), every ${hours(r.interval_hours_low, r.interval_hours_high)}, no more than ${r.max_doses_24h} doses in 24 hours.`,
+      `Result: ${doseSummary(r)}`,
+      r.amount_mg != null ? `Medicine in that amount: ${num(r.amount_mg)} mg.` : null,
       `Weight band on the label: ${r.band_low_lb}\u2013${r.band_high_lb} lb (${r.band_low_kg}\u2013${r.band_high_kg} kg).`,
       ...(r.notes || []), r.recommendation, r.combination_warning,
     ].flat().filter(Boolean);

@@ -66,9 +66,6 @@ import { copyToClipboard, downloadText, escapeAttr as attr, escapeHtml as esc, i
 import { clearPrintSheet, printSheet } from './print.js';
 
 const CHUNKS = { child: () => import('./tools-child.js'), logs: () => import('./tools-logs.js'), sheets: () => import('./tools-sheets.js') };
-const PRIVACY = "Saved only in this browser on this device. Nothing is sent to our server unless you press 'Show the summary', which sends these readings to calculate the result and nothing else. Anyone who uses this browser can see them.";
-const NO_STORAGE = 'Storage is not available in this browser; the log stays until you close this page.';
-const UNSAVED = 'Not saved: this log disappears when you close the page.';
 const NOT_AVAILABLE = 'This tool is not available right now.';
 // A hard stop (child dose) arrives with `error` AND `hard_stop`; it is a normal, renderable result, not a form error.
 const failed = r => Boolean((r.error || r.missing_inputs?.length) && !r.hard_stop);
@@ -322,6 +319,8 @@ async function run(panel) {
 }
 
 function markServer(panel, result) {
+  // A failed result can still carry fixed alerts (for example a reading above 180/120); show them first.
+  panel.result.innerHTML = (result.alerts || []).map(alertLine).join('');
   const hit = /Invalid or out-of-range input: ([\w.[\]]+)\./.exec(result.error || '');
   const marks = [];
   if (hit) { const f = panel.form.find(hit[1]); if (f) marks.push([f, `Check ${lc(f.spec.label || f.name)}: it is outside the range this tool accepts.`]); }
