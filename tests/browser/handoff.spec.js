@@ -201,7 +201,7 @@ test('native print without the Print button keeps the normal page', async ({ pag
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.app-header')).toBeVisible();
   await expect(page.locator('#handoff-print')).toBeHidden();
-  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
 });
 
 test('the print class is removed after printing so later native prints show the page', async ({ page }) => {
@@ -210,11 +210,27 @@ test('the print class is removed after printing so later native prints show the 
   await answered(page);
   await page.getByRole('button', { name: 'Hand this to a clinician' }).click();
   await page.getByRole('button', { name: 'Print' }).click();
-  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(true);
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
-  expect(await page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.app-header')).toBeVisible();
+});
+
+test('closing the dialog clears the print state even when afterprint never fires', async ({ page }) => {
+  await page.addInitScript(() => { window.print = () => {}; });
+  await page.goto('/');
+  await answered(page);
+  await page.getByRole('button', { name: 'Hand this to a clinician' }).click();
+  await page.getByRole('button', { name: 'Print' }).click();
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Hand this to a clinician' })).toBeHidden();
+  await expect.poll(() => page.evaluate(() => document.body.classList.contains('printing-handoff'))).toBe(false);
+  await expect(page.locator('#handoff-print')).toHaveText('');
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.app-header')).toBeVisible();
+  await expect(page.locator('#handoff-print')).toBeHidden();
 });
 
 test('Copy falls back to a textarea inside the dialog when the clipboard API is unavailable', async ({ page }) => {

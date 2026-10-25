@@ -139,6 +139,7 @@ let currentDate = new Date();
 let copyTimer;
 
 function clearPrintSheet() {
+  window.removeEventListener('afterprint', clearPrintSheet);
   document.body.classList.remove('printing-handoff');
   const sheet = document.getElementById('handoff-print');
   if (!sheet) return;
@@ -183,7 +184,11 @@ function printHandoff() {
   sheet.hidden = false;
   document.body.classList.add('printing-handoff');
   window.addEventListener('afterprint', clearPrintSheet, { once: true });
-  window.print();
+  try {
+    window.print();
+  } catch {
+    clearPrintSheet();
+  }
 }
 
 function buildDialog() {
@@ -219,6 +224,7 @@ function buildDialog() {
   });
   dialog.addEventListener('close', () => {
     clearTimeout(copyTimer);
+    clearPrintSheet(); // afterprint can be lost; never leave stale text armed for a later native print
     if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
   });
 }

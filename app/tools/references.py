@@ -41,6 +41,7 @@ OPENFDA_LABEL_LIMIT = 5
 OPENFDA_LABEL_MAX_BYTES = 2 * 1024 * 1024
 LABEL_RATE_LIMIT_ERROR = "The label service rate limit was reached. Try again in a minute."
 LABEL_COMBINATION_ERROR = "Only combination products matched this name. Label sections are not shown because a combination product is not the same medicine."
+LABEL_UNVERIFIED_ERROR = "No label could be confirmed as a single-ingredient product for this name. Label sections are not shown."
 LABEL_SECTIONS = (
     ("boxed_warning", "Boxed warning"),
     ("indications_and_usage", "Indications and usage"),
@@ -124,8 +125,10 @@ class ReferenceTools:
         rows = [row for row in rows if isinstance(row, dict) and self._set_id(row)] if isinstance(rows, list) else []
         row = self._select_label(rows, query)
         if row is None:
-            if rows:
+            if any(self._ingredient_count(r) > 1 for r in rows):
                 return {"items": [], "combination_only": True, "error": LABEL_COMBINATION_ERROR}
+            if rows:
+                return {"items": [], "error": LABEL_UNVERIFIED_ERROR}
             return {"items": []}
         openfda = row["openfda"]
         generic = clean_text(openfda["generic_name"][0], 120)
@@ -162,14 +165,22 @@ class ReferenceTools:
             return ""
 
     @staticmethod
-    def _single_ingredient(openfda):
-        """True only when the label metadata establishes exactly one active substance; otherwise fail closed."""
+    def _ingredient_count(row):
+        """Active ingredients the metadata establishes: 1 for a single-ingredient label, >1 for a confirmed
+        combination, 0 when the metadata is missing or ambiguous (treated as unverified, never as single)."""
+        openfda = row.get("openfda")
+        if not isinstance(openfda, dict):
+            return 0
         generic, substances = openfda.get("generic_name"), openfda.get("substance_name")
-        if not isinstance(generic, list) or len(generic) != 1 or not isinstance(generic[0], str):
-            return False
-        if not isinstance(substances, list) or len(substances) != 1 or not isinstance(substances[0], str):
-            return False
-        return not re.search(r",|;|/| AND | WITH | PLUS ", f" {generic[0].upper()} ")
+        names = [g for g in generic if isinstance(g, str)] if isinstance(generic, list) else []
+        subs = [v for v in substances if isinstance(v, str)] if isinstance(substances, list) else []
+        if len(names) > 1 or len(subs) > 1 or any(re.search(r",|;|/| AND | WITH | PLUS ", f" {n.upper()} ") for n in names):
+            return 2
+        return 1 if len(names) == 1 and len(subs) == 1 else 0
+
+    @staticmethod
+    def _single_ingredient(openfda):
+        return ReferenceTools._ingredient_count({"openfda": openfda}) == 1
 
     @staticmethod
     def _select_label(rows, query):

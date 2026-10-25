@@ -6,7 +6,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from app.tools.references import LABEL_COMBINATION_ERROR, LABEL_RATE_LIMIT_ERROR, REFERENCE_TOOLS, ReferenceTools
+from app.tools.references import LABEL_COMBINATION_ERROR, LABEL_RATE_LIMIT_ERROR, LABEL_UNVERIFIED_ERROR, REFERENCE_TOOLS, ReferenceTools
 from tests.test_pipeline import make_pipeline, FakeEvidence
 
 
@@ -288,6 +288,16 @@ async def test_label_sections_fail_closed_on_comma_combinations_and_missing_subs
     await tools.aclose()
     assert result["status"] == "empty"
     assert result["combination_only"] is True
+
+
+async def test_label_sections_with_only_unverified_metadata_are_empty_but_not_combination_only():
+    payload = {"results": [label_row(("ACETAMINOPHEN",), SET_ID, "20240101", substances=[], warnings=["No substances"])]}
+    result, _, tools = await label_lookup(lambda request: httpx.Response(200, json=payload), query="acetaminophen")
+    await tools.aclose()
+    assert result["status"] == "empty"
+    assert "combination_only" not in result
+    assert result["error"] == LABEL_UNVERIFIED_ERROR
+    assert result["items"] == []
 
 
 async def test_label_sections_accept_full_size_labels_within_their_own_budget():
