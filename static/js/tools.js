@@ -91,7 +91,7 @@ const notify = (key, entry) => { listeners.forEach(fn => fn(key, entry)); update
 
 function ensureDialog() {
   if (dialog) return dialog;
-  dialog = el('dialog', 'tool-dialog', `<div class="sidebar-header tool-header"><button type="button" class="tool-back" data-act="back" hidden>${svg(TOOL_ICON.back)}<span>All tools</span></button><div class="tool-titles"><span class="section-eyebrow" id="tool-eyebrow"></span><h2 id="tool-title" tabindex="-1"></h2></div><button type="button" class="panel-close" data-act="close" aria-label="Close tools">${svg(ICON.close)}</button></div><div class="tool-body"></div><div class="tool-footer" hidden><button type="button" class="handoff-control primary" data-act="handoff">${svg(ICON.clipboard)}<span>Hand this to a clinician</span></button></div>`);
+  dialog = el('dialog', 'tool-dialog', `<div class="sidebar-header tool-header"><button type="button" class="tool-back" data-act="back" aria-label="All tools" hidden>${svg(TOOL_ICON.back)}<span>All tools</span></button><div class="tool-titles"><span class="section-eyebrow" id="tool-eyebrow"></span><h2 id="tool-title" tabindex="-1"></h2></div><button type="button" class="panel-close" data-act="close" aria-label="Close tools">${svg(ICON.close)}</button></div><div class="tool-body"></div><div class="tool-footer" hidden><button type="button" class="handoff-control primary" data-act="handoff">${svg(ICON.clipboard)}<span>Hand this to a clinician</span></button></div>`);
   dialog.setAttribute('aria-labelledby', 'tool-title');
   document.body.appendChild(dialog);
   trapDialogFocus(dialog);

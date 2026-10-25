@@ -141,7 +141,7 @@ function renderEmergencyBanner(data, msgId) {
 }
 
 function renderToolCard(tr, msgId) {
-  if (Array.isArray(tr.items)) {
+  if (Array.isArray(tr.items) && tr.status) { // a reference lookup; a checklist calculator (STEADI) has items but no status
     const links = tr.items.filter(item => safeUrl(item.url)).map(item => `<li><a href="${escapeAttr(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.title)}</a>${item.published ? ` <small>${escapeHtml(item.published)}</small>` : ''}</li>`).join('');
     return `<section class="tool-card"><div class="tool-card-body"><div class="tool-card-name">${escapeHtml(tr.tool)}</div><p>${escapeHtml(tr.scope || '')}</p>${links ? `<ul>${links}</ul>` : `<p>${escapeHtml(tr.error || 'No matching references were returned. This does not establish safety or absence of evidence.')}</p>`}</div></section>`;
   }

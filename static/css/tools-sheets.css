@@ -51,7 +51,7 @@
   #print-sheet .call-tier.tier-emergency, #print-sheet .call-tier.tier-today { border-width: 2px; border-color: #000; }
   #print-sheet .call-phone { font-size: 18pt; font-weight: 700; }
   #print-sheet .call-blank { border: 1px dashed #000; border-radius: 0; color: #000; padding: 3mm; margin: 0 0 2mm; }
-  #print-sheet .call-lead, #print-sheet .call-sources, #print-sheet .print-cannot { font-size: 9pt; margin: 0 0 4mm; }
+  #print-sheet .call-lead, #print-sheet .call-sources, #print-sheet .print-cannot, #print-sheet .print-source { font-size: 9pt; margin: 0 0 4mm; }
   #print-sheet .call-url { overflow-wrap: anywhere; }
   #print-sheet .med-grid { font-size: 11pt; }
   #print-sheet .med-grid th, #print-sheet .med-grid td { padding: 2.5mm; }

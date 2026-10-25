@@ -1,6 +1,7 @@
 const PREFIX = 'medical-harness.log.v1.';
 const KEYS = new Set(['bp', 'glucose', 'weight', 'peak_flow_zone']);
 export const STORAGE_FULL = 'The log could not be saved (storage full). It stays until you close this page.';
+export const NOT_SAVED = 'Not saved on this device: storage is full. The latest changes stay only until you close this page.';
 
 let probe;
 

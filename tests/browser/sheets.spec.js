@@ -18,6 +18,7 @@ const medResult = (status = 'available', duplicates = []) => ({
     { name: 'Temazepam', strength: '10 mg', ingredients: ['temazepam'], slots: slots('bedtime'), wording: 'Once a day, at bedtime', placed: true, normalisation: { status: status === 'available' ? 'matched' : 'unmatched' } },
   ],
   ums_note: 'Times are the usual ones for each wording. Your label or pharmacist may differ.',
+  source: 'https://www.ahrq.gov/health-literacy/improve/pharmacy/index.html',
   duplicates,
   duplicates_note: 'Duplicates only; this sheet does not check for an interaction.',
   limitations: ['This does not check for an interaction between medicines.'],
@@ -150,6 +151,8 @@ test('medication_schedule: grid, duplicate banner, request body, Copy and RxNorm
   expect(await banner.textContent()).not.toMatch(/interaction/i);
   await expect(dialog.locator('.med-rx')).toHaveText('Names checked with NLM RxNorm.');
   await expect(dialog.locator('.tool-cannot')).toContainText('does not check interactions');
+  await expect(dialog.locator('.tool-sources a')).toHaveAttribute('href', /ahrq\.gov/);
+  await expect(dialog.locator('.tool-result')).toContainText('Your label or pharmacist may differ.');
   expect(bodies).toEqual([{ inputs: { medicines: [
     { name: 'Metformin', strength: '500 mg', directions: 'twice_daily', directions_text: '' },
     { name: 'Glucophage', strength: '', directions: 'once_daily_morning', directions_text: '' },
@@ -161,6 +164,8 @@ test('medication_schedule: grid, duplicate banner, request body, Copy and RxNorm
   expect(text).toContain('- Metformin 500 mg: morning, evening. Twice a day');
   expect(text).toContain('- Temazepam 10 mg: bedtime.');
   expect(text).toContain('Bring this sheet and every bottle and box');
+  expect(text).toContain('Your label or pharmacist may differ.');
+  expect(text).toContain('Source: https://www.ahrq.gov/');
   expect(text).not.toMatch(/interaction between/i);
 });
 
@@ -217,6 +222,8 @@ test('medication_schedule: Print fills the sheet with the grid and header, then 
   expect(await sheet.locator('.ruled').count()).toBe(4);
   expect(await printed(page)).not.toMatch(/Ask your pharmacist/);
   expect(await printed(page)).toContain('does not check interactions');
+  expect(await printed(page)).toContain('Your label or pharmacist may differ.');
+  expect(await printed(page)).toContain('Source: https://www.ahrq.gov/');
   await page.emulateMedia({ media: 'print' });
   await expect(sheet).toBeVisible();
   await expect(page.locator('.app-header')).toBeHidden();
@@ -457,7 +464,7 @@ test('when_to_call: without the fixed tiers the emergency tier is a blank box to
 
 test('when_to_call: emergency, follow-up and conversation results draw no tiers', async ({ page }) => {
   const cases = [
-    [{ type: 'emergency', emergency_message: 'Your symptoms may indicate a medical emergency.', answer: 'Call your local emergency number.' }, /may be a medical emergency/, '.tool-caution'],
+    [{ type: 'emergency', emergency_message: 'Your symptoms may indicate a medical emergency.', answer: 'Call your local emergency number.' }, /may indicate a medical emergency/, '.tool-caution'],
     [{ type: 'follow_up', preliminary_info: 'Some general information.', follow_up_questions: ['Which operation was it?'] }, /More detail is needed/, '.tool-note'],
     [{ type: 'conversation', answer: 'Hello there.' }, /No sheet was made/, '.tool-note'],
   ];
@@ -466,12 +473,31 @@ test('when_to_call: emergency, follow-up and conversation results draw no tiers'
     await mockChat(page, result);
     const dialog = await openTool(page, 'when_to_call');
     await fillWtc(dialog);
-    await expect(dialog.locator('.tool-summary')).toContainText(summary);
+    await expect(dialog.locator('.tool-result')).toContainText(summary);
     await expect(dialog.locator(selector).first()).toBeVisible();
     await expect(dialog.locator('.call-tier')).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Copy' })).toBeVisible();
     await page.goto('about:blank');
   }
+});
+
+test('when_to_call: the emergency instruction reaches Copy and the printed sheet, with the limitation line', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await stubPrint(page);
+  await mockChat(page, { type: 'emergency', emergency_message: 'Your symptoms may indicate a medical emergency.', answer: 'Call your local emergency number.' });
+  const dialog = await openTool(page, 'when_to_call');
+  await fillWtc(dialog);
+  const caution = dialog.locator('.tool-caution').first();
+  await expect(caution).toContainText('Call your local emergency number right away. No sheet was made.');
+  await expect(dialog.locator('.tool-summary')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Copy' }).click();
+  const text = await clip(page);
+  expect(text).toContain('Result: Your symptoms may indicate a medical emergency. Call your local emergency number right away. No sheet was made.');
+  expect(text).toContain('This sheet cannot know your situation.');
+  await dialog.getByRole('button', { name: 'Print' }).click();
+  const paper = await printed(page);
+  expect(paper).toContain('Call your local emergency number right away. No sheet was made.');
+  expect(paper).toContain('This sheet cannot know your situation.');
 });
 
 test('when_to_call: validation stops numbers and symbols before any request, and a server error offers a retry', async ({ page }) => {

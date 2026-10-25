@@ -268,6 +268,18 @@ async function chatWithTool(page, extra = {}) {
   await expect(page.locator('.answer-body').last()).toContainText('label amount');
 }
 
+test('a STEADI result in the chat is a scored card with a launch button, not a reference list', async ({ page }) => {
+  await mockTools(page, {});
+  await page.goto('/');
+  const items = ['fallen_past_year', 'uses_or_advised_cane_walker'].map(key => ({ key, text: 'Question', answer: true, points: 2 }));
+  await chatWithTool(page, { tool: 'Fall-risk checklist (CDC STEADI)', key: 'steadi_fall_risk', score: 4, max_score: 14, at_risk: true, items, inputs: { fallen_past_year: true }, amount_ml: undefined, summary: undefined });
+  const card = page.locator('.tool-card').last();
+  await expect(card).toContainText('Fall-risk checklist (CDC STEADI)');
+  await expect(card).toContainText('4');
+  await expect(card).not.toContainText('No matching references');
+  await expect(card.locator('.tool-launch')).toContainText('See the fall-risk score');
+});
+
 test('a chat tool card reopens the tool on its result without a request', async ({ page }) => {
   const calls = await mockTools(page, { child_dose_check: childResult });
   const requests = [];

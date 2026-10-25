@@ -287,6 +287,14 @@ test('log storage: off by default, opt-in survives a reload, clear and switching
   await expect(dialog.locator('.tool-log')).toContainText("Nothing is sent to our server unless you press 'Show the summary'");
   await addBp(dialog, { date: '2026-10-24', time: '07:30', sys: 134, dia: 86, pos: 'Seated' });
   expect(await page.evaluate(k => localStorage.getItem(k), KEY.bp)).toBeNull();
+  // An unsaved log survives closing the tool and visiting another tool; only closing the page loses it.
+  await dialog.getByRole('button', { name: 'All tools' }).click();
+  await dialog.locator('.tool-item[data-tool="glucose_log_pattern"]').click();
+  await expect(dialog.locator('#tool-title')).toContainText('Glucose pattern view');
+  await dialog.getByRole('button', { name: 'All tools' }).click();
+  await dialog.locator('.tool-item[data-tool="bp_log_summary"]').click();
+  await expect(dialog.locator('table.tool-entries tbody tr')).toHaveCount(1);
+  expect(await page.evaluate(k => localStorage.getItem(k), KEY.bp)).toBeNull();
   await page.reload();
   dialog = await openTool(page, 'bp_log_summary');
   await expect(dialog.locator('table.tool-entries')).toHaveCount(0);
@@ -316,6 +324,19 @@ test('log storage: off by default, opt-in survives a reload, clear and switching
   await expect(dialog.locator('table.tool-entries')).toHaveCount(0);
   expect(await page.evaluate(k => localStorage.getItem(k), KEY.bp)).toBeNull();
   await expect(dialog.locator('.tool-log-status')).toContainText('The log was cleared.');
+});
+
+test('log storage: a full storage after opting in is reported and the state line stops saying Saved', async ({ page }) => {
+  await seedLog(page, KEY.bp, { entries: bpEntries.slice(0, 2) });
+  const dialog = await openTool(page, 'bp_log_summary');
+  await expect(dialog.locator('#log-keep')).toBeChecked();
+  await expect(dialog.locator('.tool-log-state')).toContainText('Saved on this device.');
+  await page.evaluate(() => { const proto = Object.getPrototypeOf(localStorage); const original = proto.setItem; proto.setItem = function (k, v) { if (k.startsWith('medical-harness.log.')) { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; } return original.call(this, k, v); }; });
+  await addBp(dialog, { date: '2026-10-25', time: '07:30', sys: 128, dia: 80, pos: 'Seated' });
+  await expect(dialog.locator('table.tool-entries tbody tr')).toHaveCount(3);
+  await expect(dialog.locator('.tool-log-status')).toContainText('could not be saved');
+  await expect(dialog.locator('.tool-log-state')).toContainText('Not saved on this device: storage is full.');
+  await expect(dialog.locator('.tool-log-state')).not.toContainText('Saved on this device.');
 });
 
 test('log storage: cancelling the confirmation keeps the saved copy and the box checked', async ({ page }) => {

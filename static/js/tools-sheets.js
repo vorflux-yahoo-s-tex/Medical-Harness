@@ -158,7 +158,9 @@ function wtcText(m) {
   return out;
 }
 
-const otherSummary = r => (r.type === 'emergency' ? 'This may be a medical emergency. No sheet was made.'
+// The same emergency wording reaches the card, Copy, Download, the handoff and paper.
+const emergencyText = r => `${r.emergency_message || 'Your symptoms may indicate a medical emergency.'} Call your local emergency number right away. No sheet was made.`;
+const otherSummary = r => (r.type === 'emergency' ? emergencyText(r)
   : r.type === 'follow_up' ? 'More detail is needed before this sheet can be made.'
     : 'No sheet was made for this description.');
 
@@ -183,6 +185,7 @@ export const TOOLS = {
         body: `${duplicateBanner(r)}${gridHtml(grid, false)}<p class="tool-note med-rx">${esc(rxLine(r))}</p>`,
         notes: [BRING, r.ums_note].filter(Boolean),
         cannot: MED_CANNOT,
+        sources: r.source ? [{ label: 'AHRQ Universal Medication Schedule', url: r.source }] : [],
       };
     },
     toText(r) {
@@ -190,11 +193,11 @@ export const TOOLS = {
         ...(r.duplicates || []).map(d => `Same ingredient in more than one medicine: ${duplicateLine(d)} Ask the pharmacist before taking these together.`),
         rxLine(r),
         ...(r.grid || []).map(m => `- ${[m.name, m.strength].filter(Boolean).join(' ')}: ${timesOf(m).join(', ') || 'not placed on the grid'}. ${m.wording}`),
-        BRING];
+        BRING, r.ums_note].filter(Boolean);
     },
     print(r) {
       const node = document.createElement('div');
-      node.innerHTML = `<header class="print-sheet-header"><h1>Medication schedule</h1><p>Medication schedule prepared with medical-harness on ${esc(today())} \u00B7 not a prescription \u00B7 check with your pharmacist</p></header>${duplicateBanner(r)}${gridHtml(r.grid || [], true)}<p class="med-rx">${esc(rxLine(r))}</p><p>${BRING}</p><section class="med-notes"><h2>Notes</h2>${ruled(4)}</section><p class="print-cannot">${MED_CANNOT}</p>`;
+      node.innerHTML = `<header class="print-sheet-header"><h1>Medication schedule</h1><p>Medication schedule prepared with medical-harness on ${esc(today())} \u00B7 not a prescription \u00B7 check with your pharmacist</p></header>${duplicateBanner(r)}${gridHtml(r.grid || [], true)}<p class="med-rx">${esc(rxLine(r))}</p><p>${BRING}</p>${r.ums_note ? `<p>${esc(r.ums_note)}</p>` : ''}<section class="med-notes"><h2>Notes</h2>${ruled(4)}</section><p class="print-cannot">${MED_CANNOT}</p>${safeUrl(r.source) ? `<p class="print-source">Source: ${esc(safeUrl(r.source))}</p>` : ''}`;
       return node;
     },
   },
@@ -270,7 +273,7 @@ export const TOOLS = {
     render(r, v) {
       if (r.type !== 'answer') {
         const lines = r.type === 'follow_up' ? [r.preliminary_info, ...(r.follow_up_questions || []), 'Describe the condition in a little more detail and press \u201CMake the sheet\u201D again.'] : [r.answer];
-        return { summary: otherSummary(r), caveat: r.type === 'emergency' ? { urgent: true, text: `${r.emergency_message || 'Your symptoms may indicate a medical emergency.'} Call your local emergency number right away.` } : null, notes: lines.filter(Boolean), cannot: WTC_CANNOT };
+        return { summary: r.type === 'emergency' ? '' : otherSummary(r), caveat: r.type === 'emergency' ? { urgent: true, text: emergencyText(r) } : null, notes: lines.filter(Boolean), cannot: WTC_CANNOT };
       }
       const m = sheetModel(r, v);
       return {
@@ -283,7 +286,7 @@ export const TOOLS = {
       return r.type === 'answer' ? [`Result: ${wtcText(sheetModel(r, v)).join('\n')}`] : [`Result: ${otherSummary(r)}`];
     },
     print(r, v) {
-      if (r.type !== 'answer') return `${otherSummary(r)}\n`;
+      if (r.type !== 'answer') return `${otherSummary(r)}\n${WTC_CANNOT}\n`;
       const node = document.createElement('div');
       node.innerHTML = `<header class="print-sheet-header"><h1>When to call: ${esc(v.condition)}</h1><p>Prepared with medical-harness on ${esc(today())} \u00B7 general information, not a diagnosis</p></header>${sheetHtml(sheetModel(r, v), true)}<p class="print-cannot">${WTC_CANNOT}</p>`;
       return node;

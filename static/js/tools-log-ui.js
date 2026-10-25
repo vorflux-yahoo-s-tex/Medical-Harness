@@ -13,10 +13,15 @@ let serial = 0;
 let C = null; // { view: () => current view, dialog, kit }
 export const bind = ctx => { C = ctx; };
 
+// Logs the person did not keep stay in memory until the page closes, so closing the tool or moving to another tool does not delete them.
+const unsaved = new Map();
+
 export function initLog(def) {
   const cfg = def.log;
   const found = store.load(cfg.key);
-  return { cfg, data: found?.data || store.emptyLog(), kept: Boolean(found?.data), invalid: Boolean(found?.invalid), lastText: '' };
+  const data = found?.data || unsaved.get(cfg.key) || store.emptyLog();
+  unsaved.set(cfg.key, data);
+  return { cfg, data, kept: Boolean(found?.data), invalid: Boolean(found?.invalid), saveFailed: false, lastText: '' };
 }
 
 /** Units in force for a log: chosen for its entries, else the tool's current unit, else the first option. */
@@ -32,9 +37,12 @@ export function persist() {
   const log = C.view().log;
   if (!log.kept) return true;
   const ok = store.save(log.cfg.key, log.data);
-  if (!ok) { logStatus(store.STORAGE_FULL); }
+  log.saveFailed = !ok;
+  if (!ok) logStatus(store.STORAGE_FULL);
   return ok;
 }
+
+const stateText = log => (log.kept ? (log.saveFailed ? store.NOT_SAVED : 'Saved on this device.') : UNSAVED);
 
 function logStatus(text) { const p = C.dialog.querySelector('.tool-log-status'); if (p) p.textContent = text; }
 
@@ -46,7 +54,7 @@ export function renderLog() {
   const unitsHtml = cfg.units && !data.entries.length ? `<fieldset class="tool-field tool-radio"><legend>Units for this log</legend><div class="tool-options">${cfg.units.map(u => `<label class="tool-choice"><input type="radio" name="log-units" value="${attr(u)}"${unitsOf(log) === u ? ' checked' : ''}><span>${esc(u)}</span></label>`).join('')}</div></fieldset>` : '';
   const noun = cfg.noun || 'entry';
   const rows = [...data.entries].sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`) || 0);
-  slot.innerHTML = `<section class="tool-log" aria-label="${attr(cfg.title || 'Log')}"><h3>${esc(cfg.title || 'Log')}</h3>${log.invalid ? `<p class="tool-caution">A saved log on this device could not be read. <button type="button" class="tool-retry" data-act="log-clear-invalid">Clear it</button></p>` : ''}<label class="tool-check"><input type="checkbox" id="log-keep"${log.kept ? ' checked' : ''}${usable ? '' : ' disabled'}><span>Keep this log on this device</span></label><p class="tool-hint">${esc(usable ? PRIVACY : NO_STORAGE)}</p><p class="tool-hint tool-log-state">${esc(usable ? (log.kept ? 'Saved on this device.' : UNSAVED) : '')}</p>${unitsHtml}<div class="tool-entry"></div><button type="button" class="handoff-control" data-act="log-add">${svg(TOOL_ICON.plus)}<span>${esc(cfg.addLabel || `Add ${noun}`)}</span></button><p class="tool-status tool-log-status" role="status"></p>${data.entries.length >= (cfg.maxEntries || 400) ? `<p class="tool-note">The log holds ${cfg.maxEntries || 400} entries; adding more drops the oldest.</p>` : ''}${rows.length ? `<div class="tool-table-scroll"><table class="tool-entries"><caption class="sr-only">${esc(cfg.title || 'Log')}, newest first</caption><thead><tr><th scope="col">When</th><th scope="col">${esc(noun)}</th><th scope="col"><span class="sr-only">Delete</span></th></tr></thead><tbody>${rows.map(e => `<tr><td>${esc(shortWhen(e))}</td><td>${esc(cfg.entryText(e, data))}</td><td><button type="button" class="tool-remove" data-act="log-delete" data-id="${attr(e.id)}" aria-label="Delete ${attr(noun)} ${attr(shortWhen(e))}">${svg(TOOL_ICON.trash)}<span>Delete</span></button></td></tr>`).join('')}</tbody></table></div>` : ''}<div class="tool-log-actions"><button type="button" class="handoff-control" data-act="log-clear">Clear log</button><button type="button" class="handoff-control" data-act="log-export">${svg(ICON.download)}<span>Export as text</span></button></div></section>`;
+  slot.innerHTML = `<section class="tool-log" aria-label="${attr(cfg.title || 'Log')}"><h3>${esc(cfg.title || 'Log')}</h3>${log.invalid ? `<p class="tool-caution">A saved log on this device could not be read. <button type="button" class="tool-retry" data-act="log-clear-invalid">Clear it</button></p>` : ''}<label class="tool-check"><input type="checkbox" id="log-keep"${log.kept ? ' checked' : ''}${usable ? '' : ' disabled'}><span>Keep this log on this device</span></label><p class="tool-hint">${esc(usable ? PRIVACY : NO_STORAGE)}</p><p class="tool-hint tool-log-state">${esc(usable ? stateText(log) : '')}</p>${unitsHtml}<div class="tool-entry"></div><button type="button" class="handoff-control" data-act="log-add">${svg(TOOL_ICON.plus)}<span>${esc(cfg.addLabel || `Add ${noun}`)}</span></button><p class="tool-status tool-log-status" role="status">${log.saveFailed ? esc(store.STORAGE_FULL) : ''}</p>${data.entries.length >= (cfg.maxEntries || 400) ? `<p class="tool-note">The log holds ${cfg.maxEntries || 400} entries; adding more drops the oldest.</p>` : ''}${rows.length ? `<div class="tool-table-scroll"><table class="tool-entries"><caption class="sr-only">${esc(cfg.title || 'Log')}, newest first</caption><thead><tr><th scope="col">When</th><th scope="col">${esc(noun)}</th><th scope="col"><span class="sr-only">Delete</span></th></tr></thead><tbody>${rows.map(e => `<tr><td>${esc(shortWhen(e))}</td><td>${esc(cfg.entryText(e, data))}</td><td><button type="button" class="tool-remove" data-act="log-delete" data-id="${attr(e.id)}" aria-label="Delete ${attr(noun)} ${attr(shortWhen(e))}">${svg(TOOL_ICON.trash)}<span>Delete</span></button></td></tr>`).join('')}</tbody></table></div>` : ''}<div class="tool-log-actions"><button type="button" class="handoff-control" data-act="log-clear">Clear log</button><button type="button" class="handoff-control" data-act="log-export">${svg(ICON.download)}<span>Export as text</span></button></div></section>`;
   log.entryForm = C.kit.makeGroup(logFields(), `tool-log${++serial}-`, null);
   slot.querySelector('.tool-entry').append(log.entryForm.el);
 }
@@ -99,7 +107,7 @@ export function keepChanged(box) {
   if (box.checked) { log.kept = true; if (!persist()) { log.kept = false; box.checked = false; } }
   else if (store.load(log.cfg.key) && !confirm('Delete the saved copy from this device?')) { box.checked = true; return; }
   else { store.remove(log.cfg.key); log.kept = false; }
-  C.dialog.querySelector('.tool-log-state').textContent = log.kept ? 'Saved on this device.' : UNSAVED;
+  C.dialog.querySelector('.tool-log-state').textContent = stateText(log);
 }
 
 
