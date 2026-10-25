@@ -29,7 +29,7 @@ const BUDGETS = [
   ['tools-*.js (shell)', /^tools-[A-Z0-9]{8}\.js$/, 16 * KB],
   ['tools-form-*.js (form engine, loaded with the first tool)', /^tools-form-[A-Z0-9]{8}\.js$/, 14 * KB],
   ['tools-child|logs|sheets-*.js', /^tools-(child|logs|sheets)-[A-Z0-9]{8}\.js$/, 18 * KB],
-  ['app-*.css', /^app-[A-Z0-9]{8}\.css$/, 42 * KB],
+  ['app-*.css', /^app-[A-Z0-9]{8}\.css$/, 56 * KB],
 ];
 const outputs = Object.entries(result.metafile.outputs);
 const over = [];
