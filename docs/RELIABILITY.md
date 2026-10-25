@@ -18,6 +18,17 @@ Emergency triage precedes all tools. The planner selects at most two relevant to
 | Two-level Wells DVT | All criteria explicitly supplied → score and likelihood | Requires examination; cannot rule out a clot |
 | CHA2DS2-VASc | Confirmed AF and supplied factors → score | No treatment recommendation |
 | MRC muscle strength | Examined integer grade → description | No grade inferred from symptoms |
+| Child dose check | Medicine, concentration, weight, age → the amount printed in the AAP weight-band table | Acetaminophen and ibuprofen only; no calculation from weight; hard stop for young babies, mismatched concentration, and weights outside the table |
+| Oral rehydration planner | Weight and age → NICE and CDC maintenance volumes | Age 1 month or older; not a dehydration assessment |
+| Lab result reader | Value, units, and the range printed on the report → position, unit conversion | No range table of its own; not an interpretation |
+| Peak-flow zone | Personal best and reading → NHLBI zone | Uses the person's own plan wording; no medicine advice |
+| Heart-failure weight check | Two weights → change against the AHA threshold | Not a diagnosis; the person's own plan wins |
+| Growth percentile | Sex, age, measurement → WHO or CDC percentile and curve | Bundled tables verified by hash before use; refuses head circumference from 24 months; not a diagnosis |
+| Child BMI percentile | Sex, age, weight, height → CDC BMI-for-age percentile | Ages 2 to 20; not a weight category |
+| STEADI fall-risk checklist | Twelve explicit answers → score and CDC wording | All items required; not an assessment |
+| Home blood-pressure log | Readings → seated morning and evening averages, ACC/AHA band for discussion, standing-drop flag | Alert for any reading above 180/120; no target or diagnosis |
+| Glucose log pattern | Readings → time-of-day grid against ADA general goals | Alerts below 70 and above 250 mg/dL; no insulin or dose advice |
+| Medication schedule | Medicine list → morning, noon, evening, bedtime grid and shared-ingredient flag | RxNorm names only; not an interaction check or dosing advice; works without RxNorm using typed names |
 | Anatomy | Spatially useful question → reference scene | No patient findings, diagnosis or inferred laterality |
 | Imaging report guide | Report question → context, findings, and impression explanation | Text only; no image upload or scan interpretation |
 | Blood pressure guide | Measurement question → systolic, diastolic, and repeat-reading explanation | Illustrative values, no personal category or treatment target |

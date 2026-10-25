@@ -42,7 +42,10 @@ Anatomy context belongs to each answer. Opening its native dialog imports the vi
 | app/pipeline.py, app/prompts.py | Bounded orchestration and reviewed answer policy |
 | app/handoff.py | Deterministic clinician handoff: reason, urgency, user questions, calculations, sources, limitations, fixed questions to ask, step trace |
 | app/cache.py, app/transport.py | TTL/LRU, single-flight and circuit breakers |
-| app/tools/clinical.py | Ten sourced calculators/converters |
+| app/tools/clinical.py | Eighteen sourced calculators/converters, the shared input validation, and the calculator registry |
+| app/tools/growth.py | WHO 2006 and CDC 2000 percentile calculators over the bundled, hash-verified LMS tables |
+| app/tools/forms.py | Form-only tools (blood-pressure log, glucose log, medication schedule); lists as input, no model call |
+| app/tools/data/ | `growth_lms.json` (at most 128 KiB) and its manifest with SHA-256, row counts, and source URLs; rebuilt by `scripts/build_growth_tables.py` |
 | app/tools/references.py | DailyMed, openFDA label sections, and Europe PMC lookups |
 | static/js/anatomy-panel.js, atlas-viewer.js | Dialog and on-demand Three.js viewer |
 | static/js/education.js, context.js, dialog.js | Sourced visual guide, local settings and dialog keyboard behavior |
