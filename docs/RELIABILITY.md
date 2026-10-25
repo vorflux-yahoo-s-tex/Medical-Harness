@@ -7,6 +7,7 @@ Emergency triage precedes all tools. The planner selects at most two relevant to
 | MediSearch | Conversation → sources and excerpts | Missing evidence is explicit |
 | DailyMed labels | Named medicine → up to three US label links/dates | Directory only, no interaction or dosing claim |
 | FDA label sections | One named medicine → boxed warning, indications, contraindications, warnings, adverse reactions from the newest single-ingredient US label (openFDA) | Exact product only; combination products are flagged, not quoted; interactions section is reported as present, never quoted; no interaction or dosing claim |
+| RxNorm ingredients | One named medicine → active ingredient(s) via RxNav (exact, then normalised name match; no approximate matching) | Names only (no four-digit runs); not an interaction check, dosing, or product confirmation; items never become evidence |
 | PubMed lookup | Topic → up to three indexed abstracts via Europe PMC | Explicit research requests, not systematic review |
 | Adult BMI | Age, height, weight → BMI and CDC category | Age 20+, not pediatric/pregnancy classification |
 | CKD-EPI 2021 eGFR | Adult age, equation sex, creatinine → eGFR | Stable creatinine; not AKI, pregnancy, CKD diagnosis or dosing |
@@ -47,6 +48,9 @@ Calculator results include source, scope, and the inputs as supplied. Tests cove
 | Partial stream, review failure or invalid citations | Discard draft, return error |
 | Reference endpoint fails | Explicit unavailable result, not a clinical negative |
 | Label service rate limit (HTTP 429) | Tool reports `unavailable` with a try-again message and counts toward the circuit breaker; the answer continues from other sources |
+| RxNorm service rate limit (HTTP 429) | Tool reports `unavailable` with a try-again message and counts toward its circuit breaker; the answer continues from other sources |
+| RxNorm returns an invalid identifier or no match | Tool reports `empty`; an invalid RxCUI is rejected before a second request; the handoff says an empty result is not evidence of safety |
+| When-to-call sheet request | Same fail-closed path as chat: an emergency, clarification, or missing evidence returns its fixed result with no sheet; a failed review discards the draft. The emergency and routine tiers are server constants, so a model failure can never alter them |
 | Only combination products match a medicine name | Label tool reports `empty` with `combination_only`; no label text is shown or cited and the handoff says why |
 | Graphics/download failure | Keep searchable structures and text input |
 

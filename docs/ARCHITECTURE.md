@@ -10,6 +10,8 @@ medical-harness serves a FastAPI backend and plain HTML/CSS/JavaScript frontend.
 4. Supplemental PubMed abstracts may join the bounded source list or supply evidence when the primary provider is unavailable. Directory-only medicine labels cannot. When abstracts alter source numbering, the primary summary is dropped to avoid stale citation indices. No sources means a fixed evidence-unavailable response.
 5. Generation is buffered. Generation and both review attempts share the same bounded evidence text, including source metadata and excerpts. The retrieval summary is labeled context, never an independent source. Review also sees tool outputs. A revision is allowed once and must pass another review. Empty, interrupted, oversized or invalidly cited answers fail closed. The browser renders only the authoritative result.
 
+A `sheet` request (when-to-call sheet) takes the same path in `when_to_call` mode: triage first, the server builds the single user turn from a fixed template, tool planning is skipped (trace step `skipped`, no model call), evidence is retrieved for that turn, and a dedicated prompt drafts only the "Call your care team today if" tier. The safety review runs unchanged and must finish before the result is sent. The emergency and routine tiers are fixed constants returned as `sheet`; names, numbers, and personal thresholds never leave the browser.
+
 These checks validate control flow and citation indices, not clinical truth.
 
 ## Lifecycle and caches
@@ -46,7 +48,8 @@ Anatomy context belongs to each answer. Opening its native dialog imports the vi
 | app/tools/growth.py | WHO 2006 and CDC 2000 percentile calculators over the bundled, hash-verified LMS tables |
 | app/tools/forms.py | Form-only tools (blood-pressure log, glucose log, medication schedule); lists as input, no model call |
 | app/tools/data/ | `growth_lms.json` (at most 128 KiB) and its manifest with SHA-256, row counts, and source URLs; rebuilt by `scripts/build_growth_tables.py` |
-| app/tools/references.py | DailyMed, openFDA label sections, and Europe PMC lookups |
+| app/tools/references.py | DailyMed, openFDA label sections, Europe PMC, and RxNorm ingredient lookups |
+| app/tools/sheets.py | Fixed emergency and routine tiers of the when-to-call sheet and its response envelope; the middle tier is model-written through the pipeline's sheet mode |
 | static/js/anatomy-panel.js, atlas-viewer.js | Dialog and on-demand Three.js viewer |
 | static/js/education.js, context.js, dialog.js | Sourced visual guide, local settings and dialog keyboard behavior |
 | scripts/build_atlas.mjs, check_atlas.mjs | Reproducible packs and decoded geometry validation |

@@ -13,7 +13,9 @@ from app.main import create_app
 from app.cache import TTLCache
 from app.handoff import build_handoff
 from app.pipeline import ReviewUnavailable
+from app.prompts import WHEN_TO_CALL_REQUEST
 from app.schemas import Handoff
+from app.tools.sheets import build_when_to_call_sheet
 
 
 def minimal_handoff(reason="answer_available"):
@@ -421,3 +423,146 @@ def test_chat_limit_does_not_consume_tool_budget(client):
         assert client.post("/api/chat", json={"conversation": ["Question"]}).status_code == 200
     assert client.post("/api/chat", json={"conversation": ["Question"]}).status_code == 429
     assert client.post("/api/tools/bmi", json={"inputs": {}}).status_code == 200
+
+
+# ---------------------------------------------------------------- when-to-call sheet requests
+
+
+SHEET_BODY = {"sheet": {"kind": "when_to_call", "condition": "heart failure"}}
+
+
+class SheetPipeline(FakePipeline):
+    def __init__(self):
+        super().__init__()
+        self.seen = []
+
+    async def run(self, conversation, conversation_id, mode="chat"):
+        self.seen.append((list(conversation), mode))
+        return {
+            "type": "answer", "answer": "Call if swelling gets worse [1].", "evidence_status": "available",
+            "sheet": build_when_to_call_sheet() if mode == "when_to_call" else None,
+            "handoff": minimal_handoff(),
+        }
+
+    async def run_streaming(self, conversation, conversation_id, mode="chat"):
+        yield ("step", {"step": "triage", "message": "Understanding your question…"})
+        yield ("result", await self.run(conversation, conversation_id, mode))
+
+
+def sse_result(response):
+    block = next(b for b in response.text.split("\n\n") if b.startswith("event: result"))
+    return json.loads(block.split("data: ", 1)[1])
+
+
+@pytest.fixture
+def sheet_client(client):
+    client.app.state.pipeline = SheetPipeline()
+    return client
+
+
+@pytest.mark.parametrize("endpoint", ["/api/chat", "/api/chat/stream"])
+@pytest.mark.parametrize("extra", [
+    {"conversation": ["What is flu?"]},
+    {"conversation": ["q", "a", "q2"]},
+    {"conversation": [""]},
+    {"user_turn_times": ["2026-10-01T10:00:00Z"]},
+])
+def test_sheet_with_a_conversation_is_rejected_on_both_routes(sheet_client, endpoint, extra):
+    response = sheet_client.post(endpoint, json={**SHEET_BODY, **extra})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "A sheet request must not include a conversation."
+    assert sheet_client.app.state.pipeline.seen == []
+
+
+@pytest.mark.parametrize("endpoint", ["/api/chat", "/api/chat/stream"])
+@pytest.mark.parametrize("body", [{}, {"conversation": []}, {"sheet": None}, {"conversation": [], "sheet": None}])
+def test_neither_conversation_nor_sheet_is_rejected(sheet_client, endpoint, body):
+    assert sheet_client.post(endpoint, json=body).status_code == 422
+
+
+@pytest.mark.parametrize("condition", [
+    "hi", "x" * 201, "knee replacement 2026", "call 555 1234", "<script>alert(1)</script>", "line one\nline two",
+    "name: Jane, phone", "_hidden", "", "   ", 5, None,
+])
+def test_sheet_condition_must_be_plain_words(sheet_client, condition):
+    response = sheet_client.post("/api/chat", json={"sheet": {"kind": "when_to_call", "condition": condition}})
+    assert response.status_code == 422
+    assert sheet_client.app.state.pipeline.seen == []
+
+
+@pytest.mark.parametrize("sheet", [
+    {"kind": "discharge", "condition": "heart failure"},
+    {"condition": "heart failure"},
+    {"kind": "when_to_call"},
+    {"kind": "when_to_call", "condition": "heart failure", "name": "Jane Doe"},
+    {"kind": "when_to_call", "condition": "heart failure", "phone": "555", "thresholds": {"weight": 2}},
+    "when_to_call",
+])
+def test_sheet_shape_is_closed(sheet_client, sheet):
+    assert sheet_client.post("/api/chat", json={"sheet": sheet}).status_code == 422
+
+
+@pytest.mark.parametrize("condition", ["heart failure", "  COPD flare-up  ", "Knee replacement (left), 6 weeks ago", "a1c"])
+def test_sheet_accepts_plain_conditions_and_strips_whitespace(sheet_client, condition):
+    assert sheet_client.post("/api/chat", json={"sheet": {"kind": "when_to_call", "condition": condition}}).status_code == 200
+    conversation, mode = sheet_client.app.state.pipeline.seen[-1]
+    assert mode == "when_to_call"
+    assert conversation == [WHEN_TO_CALL_REQUEST.format(condition=condition.strip())]
+
+
+def test_sheet_json_response_has_the_sheet_and_the_server_built_turn(sheet_client):
+    response = sheet_client.post("/api/chat", json=SHEET_BODY)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sheet"] == build_when_to_call_sheet()
+    assert set(body["sheet"]) == {"kind", "emergency_signs", "emergency_line", "routine_lines", "middle_tier_source"}
+    assert body["type"] == "answer" and body["conversation_id"]
+    assert sheet_client.app.state.pipeline.seen == [([WHEN_TO_CALL_REQUEST.format(condition="heart failure")], "when_to_call")]
+
+
+def test_sheet_field_is_in_the_sse_result_event(sheet_client):
+    with sheet_client.stream("POST", "/api/chat/stream", json=SHEET_BODY) as response:
+        response.read()
+    assert response.status_code == 200
+    result = sse_result(response)
+    assert result["sheet"] == build_when_to_call_sheet()
+    assert result["type"] == "answer"
+    assert sheet_client.app.state.pipeline.seen[-1][1] == "when_to_call"
+
+
+@pytest.mark.parametrize("endpoint", ["/api/chat", "/api/chat/stream"])
+def test_plain_chat_requests_do_not_use_sheet_mode(sheet_client, endpoint):
+    response = sheet_client.post(endpoint, json={"conversation": ["What is flu?"]})
+    assert response.status_code == 200
+    assert sheet_client.app.state.pipeline.seen[-1] == (["What is flu?"], "chat")
+    result = sse_result(response) if endpoint.endswith("stream") else response.json()
+    assert result["sheet"] is None
+
+
+def test_chat_requests_still_reach_pipelines_without_a_mode_argument(client):
+    # FakePipeline.run has no `mode` parameter: plain chat must not pass one.
+    assert client.post("/api/chat", json={"conversation": ["What is flu?"]}).status_code == 200
+    with client.stream("POST", "/api/chat/stream", json={"conversation": ["What is flu?"]}) as response:
+        response.read()
+    assert "event: result" in response.text
+
+
+def test_sheet_failure_handoff_uses_the_server_built_turn(sheet_client):
+    class Failing(SheetPipeline):
+        async def run(self, conversation, conversation_id, mode="chat"):
+            raise ReviewUnavailable("bare")
+
+        async def run_streaming(self, conversation, conversation_id, mode="chat"):
+            raise ReviewUnavailable("bare")
+            yield
+
+    sheet_client.app.state.pipeline = Failing()
+    response = sheet_client.post("/api/chat", json=SHEET_BODY)
+    assert response.status_code == 503
+    handoff = Handoff(**response.json()["handoff"])
+    assert handoff.questions == [WHEN_TO_CALL_REQUEST.format(condition="heart failure")]
+    with sheet_client.stream("POST", "/api/chat/stream", json=SHEET_BODY) as streamed:
+        streamed.read()
+    error = next(b for b in streamed.text.split("\n\n") if b.startswith("event: error"))
+    assert "event: result" not in streamed.text
+    assert Handoff(**json.loads(error.split("data: ", 1)[1])["handoff"]).questions == handoff.questions

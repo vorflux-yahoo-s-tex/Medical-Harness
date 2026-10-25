@@ -21,7 +21,21 @@ Both chat endpoints accept JSON with `conversation` and an optional `conversatio
 }
 ```
 
-`conversation` is a nonempty list of strings: user, assistant, user, and so on. It must end with the user's message. The server limits the conversation to 39 messages and each message to 8,000 characters by default. Reuse the returned `conversation_id` for follow-up requests.
+`conversation` is a nonempty list of strings: user, assistant, user, and so on (omitted only for a [sheet request](#when-to-call-sheet-request)). It must end with the user's message. The server limits the conversation to 39 messages and each message to 8,000 characters by default. Reuse the returned `conversation_id` for follow-up requests.
+
+### When-to-call sheet request
+
+Both chat endpoints also accept a `sheet` field in place of a conversation:
+
+```json
+{
+  "sheet": {"kind": "when_to_call", "condition": "heart failure"}
+}
+```
+
+`kind` is always `"when_to_call"`. `condition` is 3 to 200 characters of letters, digits, spaces, and basic punctuation (`, . ' ( ) / & + -`) with no run of four digits, so dates, phone numbers, and identifiers are rejected with 422; unknown fields are rejected too. When `sheet` is present `conversation` must be omitted or empty and `user_turn_times` must be empty, otherwise the route returns 400 `{"detail": "A sheet request must not include a conversation."}`; without `sheet`, an empty conversation is still a 422. The server builds the single user turn itself from a fixed template ("Make a when-to-call sheet for someone recently discharged after: {condition}. List warning signs that mean they should call their care team the same day."). Names, phone numbers, and a person's own thresholds are never part of a request; the browser adds them to the printed sheet.
+
+The request runs the normal pipeline in sheet mode: emergency triage first (an emergency, a clarification, or a conversation result is returned exactly as in chat and carries no `sheet`), no tool planning (the `tools` trace step is `skipped`), source retrieval for the templated turn, a dedicated drafting prompt for the middle tier only, then the unchanged safety review. `visual_context` and `anatomy_context` are `null`.
 
 `POST /api/chat` waits for a JSON response. For example:
 
@@ -32,6 +46,22 @@ curl -X POST http://localhost:8080/api/chat \
 ```
 
 The response has `type` (`answer`, `follow_up`, `emergency`, or `conversation`), `conversation_id`, `answer`, `articles`, `tool_results`, `followups`, `anatomy_context`, and emergency or clarification fields. A `conversation` result handles greetings, thanks, help requests, unclear messages, and unrelated requests with a short reply in `answer`. It has no articles or calculator results and uses `evidence_status: "not_applicable"`. See `app/schemas.py` for exact optional fields and defaults.
+
+In sheet mode the `answer` result also carries `sheet`, which is `null` or absent on every other result (including emergency, clarification, and evidence-unavailable results):
+
+```json
+{
+  "sheet": {
+    "kind": "when_to_call",
+    "emergency_signs": ["Chest pain or pressure, ...", "..."],
+    "emergency_line": "Call your local emergency number now; do not wait for an online answer.",
+    "routine_lines": ["Keep your follow-up appointment.", "..."],
+    "middle_tier_source": "answer"
+  }
+}
+```
+
+`emergency_signs`, `emergency_line`, and `routine_lines` are fixed server constants (`app/tools/sheets.py`; the signs restate the triage red flags in patient wording). The reviewed, cited middle tier ("Call your care team today if") is `answer`, with its sources in `articles`; `middle_tier_source` names that field. The handoff's `limitations` adds a line stating that the middle tier was written from retrieved sources and reviewed, that the other tiers are fixed, and that names, numbers, and personal thresholds were added in the browser and never sent.
 
 ### Time and country context
 
@@ -146,6 +176,8 @@ The default aggregate conversation limit is 32,000 characters and request body l
 `tool_results` may contain a reference result with `tool`, `source`, `scope`, `status` (`available`, `empty`, `unavailable`), and `items`. Each item has `title` and a validated source `url`. DailyMed items optionally include `published`; they contain label directory metadata, not label contents or interaction checks. Europe PMC items include an abstract excerpt in `tldr`, `year`, `journal`, and `evidence_kind: "abstract"`. Label-section items use `evidence_kind: "label_section"` with the same `tldr`, `title`, `url`, `year`, and `journal` fields.
 
 The `FDA label sections` tool (`label_sections`, openFDA) returns, for one named medicine, a result with `status`, `product`, `generic_name`, `effective_time`, `set_id`, a DailyMed `url` built from the set ID, `has_interactions_section` (presence only; the interactions text is never quoted), and `items`. Each item is one section in fixed order (`boxed_warning`, `indications_and_usage`, `contraindications`, `warnings_and_precautions` or `warnings`, `adverse_reactions`) with `title`, `section`, `url`, `year`, `journal`, `source`, `tldr` (HTML stripped, at most 1,000 characters), and `evidence_kind: "label_section"`. If only combination products match the name, the result has `status: "empty"`, `combination_only: true`, an `error` explaining why, and no items. If rows match but none can be confirmed as a single-ingredient product (missing or ambiguous ingredient metadata), the result is `status: "empty"` with an `error` and no `combination_only` flag. A rate limit (HTTP 429) gives `status: "unavailable"` with a try-again message.
+
+The `RxNorm ingredients` tool (`rxnorm_ingredients`, RxNav at `rxnav.nlm.nih.gov`, no key) resolves one explicitly named medicine to its active ingredients; it is not an interaction check, dosing, or a product confirmation. The query is 1 to 60 characters of letters, digits, spaces, and hyphens, starting with a letter and with no run of four digits. It makes at most two requests inside the 8-second budget: an exact-then-normalised name match (`rxcui.json?name=...&search=2`, no approximate matching, so a misspelling is `empty` rather than a guess), then `rxcui/<id>/related.json?tty=IN+MIN` for the first match. Identifiers must be 1 to 8 digits; an invalid one gives `status: "empty"` without a second request. The result has `status`, `rxcui` (the matched concept), `combination`, and `items`, each `{"title": <ingredient name>, "url": <RxNav page for that RxCUI>, "rxcui", "tty": "IN"}`. `combination` is `true` when the match has two or more ingredients; the combination concepts (`tty: "MIN"`) are then added to `items`. A single ingredient is never flagged just because RxNorm lists combinations that contain it. Items carry no `tldr`, so they never become numbered evidence. A rate limit (HTTP 429) gives `status: "unavailable"` with a try-again message and counts toward the circuit breaker.
 
 PubMed abstracts and official label sections (any reference item with a `tldr` excerpt) may join the numbered article list or supply evidence when the primary provider is unavailable or fails. Label sections come first (at most 5), then abstracts, then the primary sources fill the rest; when they change the numbering the primary retrieval summary is dropped. The combined list remains bounded by `MAX_EVIDENCE_ARTICLES`, and all claims still pass answer review. Directory-only label results cannot replace medical evidence. Failed lookups return an explicit limitation; they never mean a medicine is safe or that no research exists.
 

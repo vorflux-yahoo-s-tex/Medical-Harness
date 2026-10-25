@@ -295,3 +295,28 @@ class TestPatientToolHandoff:
             h = build_handoff(["q"], "answer_available", None, triage_done=True, tool_results=[result, dict(result)])
             assert h["limitations"].count(LIMITATION_RXNORM) == (1 if expected else 0)
         assert LIMITATION_RXNORM == "RxNorm matched medicine names to ingredients; it did not check interactions or doses."
+
+
+# ---------------------------------------------------------------- when-to-call sheet limitation
+
+def test_sheet_limitation_is_added_only_when_a_sheet_is_present_and_stays_before_the_citation_line():
+    from app.handoff import LIMITATION_SHEET
+    article = {"title": "Study", "url": "https://example.org/s"}
+    plain = build_handoff(["q"], "answer_available", None, triage_done=True, articles=[article], answer="Sign [1].")
+    sheet = build_handoff(["q"], "answer_available", None, triage_done=True, articles=[article], answer="Sign [1].", sheet=True)
+    assert LIMITATION_SHEET not in plain["limitations"]
+    assert sheet["limitations"].count(LIMITATION_SHEET) == 1
+    assert sheet["limitations"][-1] == LIMITATION_CITATIONS
+    assert [x for x in sheet["limitations"] if x != LIMITATION_SHEET] == plain["limitations"]
+    assert sheet["reason"] == plain["reason"] == "answer_available"
+    Handoff(**sheet)
+
+
+def test_sheet_limitation_text_and_sensitivity():
+    from app.handoff import LIMITATION_SHEET
+    assert LIMITATION_SHEET == (
+        "When-to-call sheet: the middle tier was written from retrieved sources and reviewed; the emergency and routine tiers "
+        "are fixed; names, numbers, and personal thresholds were added in the browser and never sent."
+    )
+    handoff = build_handoff([SECRET], "answer_available", None, triage_done=True, answer=f"{SECRET} [1]", sheet=True)
+    assert SECRET not in json.dumps(handoff["limitations"])
