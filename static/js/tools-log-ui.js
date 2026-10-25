@@ -13,15 +13,19 @@ let serial = 0;
 let C = null; // { view: () => current view, dialog, kit }
 export const bind = ctx => { C = ctx; };
 
-// Logs the person did not keep stay in memory until the page closes, so closing the tool or moving to another tool does not delete them.
-const unsaved = new Map();
+// Each log's data stays in memory until the page closes, so closing the tool or moving to another tool does not
+// delete entries the person did not keep, or changes that a full storage could not save.
+const memory = new Map();
 
 export function initLog(def) {
   const cfg = def.log;
   const found = store.load(cfg.key);
-  const data = found?.data || unsaved.get(cfg.key) || store.emptyLog();
-  unsaved.set(cfg.key, data);
-  return { cfg, data, kept: Boolean(found?.data), invalid: Boolean(found?.invalid), saveFailed: false, lastText: '' };
+  const held = memory.get(cfg.key);
+  const saveFailed = Boolean(held?.saveFailed);
+  const data = (saveFailed && held.data) || found?.data || held?.data || store.emptyLog();
+  const log = { cfg, data, kept: Boolean(found?.data) || saveFailed, invalid: Boolean(found?.invalid), saveFailed, lastText: '' };
+  memory.set(cfg.key, log);
+  return log;
 }
 
 /** Units in force for a log: chosen for its entries, else the tool's current unit, else the first option. */

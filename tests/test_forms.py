@@ -274,6 +274,15 @@ def test_glucose_hypoglycaemia_alert_survives_an_invalid_companion_row():
     assert "error" in result and result["alerts"][0]["level"] == "emergency"
 
 
+def test_glucose_high_alert_survives_an_invalid_companion_row_or_a1c():
+    bad_row = {"date": "2026-10-01", "time": "08:00", "value": 100, "units": "mg/dL", "tag": "nope"}
+    result = run("glucose_log_pattern", {"readings": [glucose(300), bad_row]})
+    assert "error" in result and [a["level"] for a in result["alerts"]] == ["call_today"]
+    assert "above 250" in result["alerts"][0]["text"]
+    result = run("glucose_log_pattern", {"readings": [glucose(300)], "a1c_percent": 99})
+    assert "error" in result and "above 250" in result["alerts"][0]["text"]
+
+
 def test_times_with_a_timezone_are_rejected_not_crashed():
     result = run("bp_log_summary", {"readings": [bp(1, "08:00", 120, 80), bp(1, "09:00Z", 120, 80)]})
     assert result["error"] == "Invalid or out-of-range input: readings[1].time."

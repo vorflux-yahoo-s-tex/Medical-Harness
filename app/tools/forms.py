@@ -208,16 +208,22 @@ def _in_target(slot, value):
     return (low is None or value >= low) and (value <= high if slot != "after_meal" else value < high)
 
 
+def glucose_alerts(mg_dl_values):
+    """Fixed glucose alerts for a set of readings in mg/dL; shared by the normal and the raw path."""
+    alerts = []
+    if any(v < 54 for v in mg_dl_values):
+        alerts.append({"level": "emergency", "text": GLUCOSE_ALERT_LEVEL_2})
+    if any(54 <= v < 70 for v in mg_dl_values):
+        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_LEVEL_1})
+    if any(v > 250 for v in mg_dl_values):
+        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_HIGH})
+    return alerts
+
+
 def run_glucose_log_pattern(model: GlucoseLogInputs):
     readings = sorted(model.readings, key=lambda r: (r.date, r.time))
     values = [(r, _mg_dl(r)) for r in readings]
-    alerts = []
-    if any(v < 54 for _, v in values):
-        alerts.append({"level": "emergency", "text": GLUCOSE_ALERT_LEVEL_2})
-    if any(54 <= v < 70 for _, v in values):
-        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_LEVEL_1})
-    if any(v > 250 for _, v in values):
-        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_HIGH})
+    alerts = glucose_alerts([v for _, v in values])
     grid = []
     for slot in GLUCOSE_SLOTS:
         slot_values = [v for r, v in values if r.tag == slot]
@@ -418,13 +424,7 @@ def bp_raw_alerts(inputs):
 
 
 def glucose_raw_alerts(inputs):
-    values = [_mg_dl(r) for r in _valid_rows(inputs, GlucoseReading)]
-    alerts = []
-    if any(v < 54 for v in values):
-        alerts.append({"level": "emergency", "text": GLUCOSE_ALERT_LEVEL_2})
-    if any(54 <= v < 70 for v in values):
-        alerts.append({"level": "call_today", "text": GLUCOSE_ALERT_LEVEL_1})
-    return alerts
+    return glucose_alerts([_mg_dl(r) for r in _valid_rows(inputs, GlucoseReading)])
 
 
 def _register(key, name, description, model, source, scope, runner, needs_references=False, raw_alerts=None):

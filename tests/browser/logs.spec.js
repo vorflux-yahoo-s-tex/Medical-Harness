@@ -337,6 +337,16 @@ test('log storage: a full storage after opting in is reported and the state line
   await expect(dialog.locator('.tool-log-status')).toContainText('could not be saved');
   await expect(dialog.locator('.tool-log-state')).toContainText('Not saved on this device: storage is full.');
   await expect(dialog.locator('.tool-log-state')).not.toContainText('Saved on this device.');
+  // Leaving and reopening the tool keeps the unsaved change and its warning rather than reverting to the saved copy.
+  await dialog.getByRole('button', { name: 'All tools' }).click();
+  await dialog.locator('.tool-item[data-tool="glucose_log_pattern"]').click();
+  await expect(dialog.locator('#tool-title')).toContainText('Glucose pattern view');
+  await dialog.getByRole('button', { name: 'All tools' }).click();
+  await dialog.locator('.tool-item[data-tool="bp_log_summary"]').click();
+  await expect(dialog.locator('table.tool-entries tbody tr')).toHaveCount(3);
+  await expect(dialog.locator('#log-keep')).toBeChecked();
+  await expect(dialog.locator('.tool-log-state')).toContainText('Not saved on this device: storage is full.');
+  expect(JSON.parse(await page.evaluate(k => localStorage.getItem(k), KEY.bp)).entries).toHaveLength(2);
 });
 
 test('log storage: cancelling the confirmation keeps the saved copy and the box checked', async ({ page }) => {
