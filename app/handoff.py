@@ -85,6 +85,7 @@ LIMITATION_LABELS = (
     "Label excerpts are from the US label for the exact product named; "
     "they are not an interaction check or dosing advice."
 )
+LIMITATION_RXNORM = "RxNorm matched medicine names to ingredients; it did not check interactions or doses."
 LIMITATION_CITATIONS = "Citations were checked to point at retrieved sources; each claim's truth was not verified."
 
 _CITATION_MARKER = re.compile(r"[\[【〔](\d+(?:\s*[,，]\s*\d+)*)[\]】〕]")
@@ -121,11 +122,14 @@ def _text(value) -> str:
 
 
 def _headline(result: dict) -> tuple[str, str]:
-    """Mirror of toolHeadline in static/js/dom-utils.js: value, score, bmi, grade."""
+    """Mirror of toolHeadline in static/js/dom-utils.js: value, score, bmi, grade, then the summary line."""
     for field in ("value", "score", "bmi", "grade"):
         number = result.get(field)
         if isinstance(number, (int, float)) and not isinstance(number, bool):
             return str(number), _text(result.get("units")) if field == "value" else ""
+    summary = result.get("summary")
+    if isinstance(summary, str) and summary:
+        return summary, ""
     return "", ""
 
 
@@ -222,6 +226,8 @@ def build_handoff(
             limitations.append(LIMITATION_UNREACHABLE.format(tool=_text(result.get("tool"))))
         elif result.get("status") == "empty":
             limitations.append(LIMITATION_EMPTY.format(tool=_text(result.get("tool"))))
+        if result.get("tool") == "RxNorm ingredients" and result.get("status") != "unavailable" and LIMITATION_RXNORM not in limitations:
+            limitations.append(LIMITATION_RXNORM)
     for calc in calculations:
         if calc["error"] or calc["missing_inputs"]:
             limitations.append(LIMITATION_CALC_INPUTS.format(tool=calc["tool"]))
