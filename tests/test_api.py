@@ -339,3 +339,85 @@ def test_timeout_returns_route_built_handoff(client, monkeypatch):
     assert {step.status for step in handoff.trace.steps} == {"skipped"}
     event = sse_error(client)
     assert Handoff(**event["handoff"]).reason == "review_unavailable"
+
+
+# ---------------------------------------------------------------- tools endpoint
+
+def test_tools_catalog_lists_calculators_and_forms_but_not_reference_tools(client):
+    body = client.get("/api/tools").json()
+    keys = {tool["key"]: tool for tool in body["tools"]}
+    assert {"bmi", "child_dose_check", "growth_percentile", "steadi_fall_risk"} <= set(keys)
+    assert {k for k, t in keys.items() if t["kind"] == "form"} == {"bp_log_summary", "glucose_log_pattern", "medication_schedule"}
+    assert not {"drug_labels", "pubmed_search", "label_sections", "rxnorm_ingredients"} & set(keys)
+    for tool in keys.values():
+        assert set(tool) == {"key", "name", "description", "variables", "source", "scope", "kind"}
+
+
+def test_tool_run_returns_result_without_model_calls(client):
+    response = client.post("/api/tools/bmi", json={"inputs": {"weight_kg": 70, "height_cm": 175, "age_years": 30}})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_key"] == "bmi" and body["result"]["bmi"] == 22.9 and body["result"]["key"] == "bmi"
+
+
+def test_tool_run_error_shape_has_no_value(client):
+    body = client.post("/api/tools/bmi", json={"inputs": {"weight_kg": -1, "height_cm": 175, "age_years": 30}}).json()
+    assert body["result"]["error"] and "bmi" not in body["result"]
+    missing = client.post("/api/tools/bmi", json={"inputs": {}}).json()["result"]
+    assert missing["missing_inputs"] and "bmi" not in missing
+
+
+@pytest.mark.parametrize("key", ["drug_labels", "pubmed_search", "label_sections", "rxnorm_ingredients", "nope", "__class__"])
+def test_tool_run_unknown_and_reference_keys_are_404(client, key):
+    response = client.post(f"/api/tools/{key}", json={"inputs": {"query": "aspirin"}})
+    assert response.status_code == 404 and response.json() == {"detail": "Unknown tool."}
+
+
+@pytest.mark.parametrize("body", [{}, {"inputs": [1]}, {"inputs": {}, "extra": 1}, {"inputs": "x"}])
+def test_tool_run_rejects_malformed_bodies(client, body):
+    assert client.post("/api/tools/bmi", json=body).status_code == 422
+
+
+def test_form_tool_runs_with_the_pipeline_references(client):
+    class References:
+        async def run(self, key, variables):
+            return {"status": "available", "rxcui": "1", "items": [{"title": "acetaminophen", "rxcui": "161", "tty": "IN", "url": "https://x"}]}
+    client.app.state.pipeline.references = References()
+    response = client.post("/api/tools/medication_schedule", json={"inputs": {"medicines": [
+        {"name": "Tylenol", "directions": "twice_daily"}, {"name": "Paracetamol", "directions": "as_needed"}]}})
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["status"] == "available" and result["duplicates"][0]["ingredient"] == "acetaminophen"
+
+
+def test_form_tool_degrades_when_pipeline_has_no_references(client):
+    response = client.post("/api/tools/medication_schedule", json={"inputs": {"medicines": [{"name": "Tylenol", "directions": "twice_daily"}]}})
+    assert response.status_code == 200 and response.json()["result"]["status"] == "unavailable"
+
+
+def test_tool_log_line_has_key_and_outcome_only(client, caplog):
+    import logging
+    with caplog.at_level(logging.INFO, logger="app.api.routes"):
+        client.post("/api/tools/bmi", json={"inputs": {"weight_kg": 71.234, "height_cm": 175, "age_years": 30}})
+        client.post("/api/tools/bmi", json={"inputs": {"weight_kg": -1, "height_cm": 175, "age_years": 30}})
+    lines = [r.getMessage() for r in caplog.records if "tool run" in r.getMessage()]
+    assert lines == ["tool run tool_key=bmi outcome=ok", "tool run tool_key=bmi outcome=error"]
+
+
+def test_tool_rate_limit_has_its_own_counter(client):
+    from app.config import get_settings
+    settings = get_settings()
+    for _ in range(settings.tool_rate_limit_requests):
+        assert client.post("/api/tools/bmi", json={"inputs": {}}).status_code == 200
+    limited = client.post("/api/tools/bmi", json={"inputs": {}})
+    assert limited.status_code == 429 and "Retry-After" in limited.headers
+    assert client.post("/api/chat", json={"conversation": ["Question"]}).status_code == 200
+    assert client.get("/api/tools").status_code == 200
+
+
+def test_chat_limit_does_not_consume_tool_budget(client):
+    from app.config import get_settings
+    for _ in range(get_settings().rate_limit_requests):
+        assert client.post("/api/chat", json={"conversation": ["Question"]}).status_code == 200
+    assert client.post("/api/chat", json={"conversation": ["Question"]}).status_code == 429
+    assert client.post("/api/tools/bmi", json={"inputs": {}}).status_code == 200

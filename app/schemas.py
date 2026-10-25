@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
@@ -112,3 +112,13 @@ class ChatResponse(BaseModel):
     emergency: bool = False
     emergency_message: str = ""
     handoff: Handoff | None = None
+
+
+class ToolRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inputs: dict[str, Any]
+
+
+class ToolRunResponse(BaseModel):
+    tool_key: str
+    result: dict

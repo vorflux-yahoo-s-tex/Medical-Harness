@@ -15,7 +15,9 @@ from app.config import get_settings
 from app.context import request_context, resolve_context, user_turn_times
 from app.handoff import build_handoff
 from app.pipeline import ReviewUnavailable, cache_scope
-from app.schemas import ChatRequest, ChatResponse
+from app.schemas import ChatRequest, ChatResponse, ToolRunRequest, ToolRunResponse
+from app.tools.clinical import TOOL_REGISTRY
+from app.tools.forms import FORM_TOOLS, run_form_tool
 
 logger = logging.getLogger(__name__)
 
@@ -171,3 +173,25 @@ async def metrics(request: Request) -> dict:
         "evidence_cache": pipeline.evidence_cache.stats(),
         "outcomes": pipeline.outcome_stats(),
     }
+
+
+@router.get("/tools")
+async def list_tools() -> dict:
+    tools = [{"key": key, "name": info["name"], "description": info["description"], "variables": info["variables"],
+              "source": info["source"], "scope": info["scope"], "kind": "calculator"} for key, info in TOOL_REGISTRY.items()]
+    tools += [{"key": key, "name": info["name"], "description": info["description"], "variables": info["variables"],
+               "source": info["source"], "scope": info["scope"], "kind": "form"} for key, info in FORM_TOOLS.items()]
+    return {"tools": tools}
+
+
+@router.post("/tools/{key}", response_model=ToolRunResponse)
+async def run_tool(key: str, body: ToolRunRequest, request: Request) -> ToolRunResponse:
+    if key in FORM_TOOLS:
+        result = await run_form_tool(key, body.inputs, getattr(request.app.state.pipeline, "references", None))
+    elif key in TOOL_REGISTRY:
+        result = TOOL_REGISTRY[key]["function"](body.inputs)
+    else:
+        raise HTTPException(404, "Unknown tool.")
+    outcome = "unavailable" if result.get("status") == "unavailable" else "error" if "error" in result else "ok"
+    logger.info("tool run tool_key=%s outcome=%s", key, outcome)
+    return ToolRunResponse(tool_key=key, result=result)
