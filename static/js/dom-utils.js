@@ -226,7 +226,7 @@ const TOOL_FIELD_LABELS = {
   grade: "MRC Grade",
   description: "Description"
 };
-const TOOL_SKIP_FIELDS = /* @__PURE__ */ new Set(["tool", "recommendation", "error", "source"]);
+const TOOL_SKIP_FIELDS = /* @__PURE__ */ new Set(["tool", "recommendation", "error", "source", "inputs"]);
 function toolCardRows(tr, headlineKey) {
   const rows = [];
   for (const [key, val] of Object.entries(tr)) {
@@ -244,6 +244,24 @@ function toolHeadline(tr) {
   if (typeof tr.grade === "number") return ["grade", tr.grade, "Grade / 5"];
   return [null, null, null];
 }
+function inputsText(inputs) {
+  if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) return "";
+  return Object.entries(inputs).map(([key, val]) => `${key} = ${val}`).join(", ");
+}
+function traceStepText(step) {
+  const detail = String(step.detail || "").replace(/_/g, " ");
+  return `${step.name} \xB7 ${step.status}${detail ? ` (${detail})` : ""} \xB7 ${step.elapsed_ms} ms`;
+}
+function claimSupportText(support) {
+  if (!support) return "";
+  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+  const parts = [
+    plural(support.citation_markers, "citation marker"),
+    `${support.sources_cited} of ${plural(support.sources_retrieved, "source")} cited`
+  ];
+  if (support.uncited_sources?.length) parts.push(`not cited: ${support.uncited_sources.join(", ")}`);
+  return parts.join(" \xB7 ");
+}
 function safeUrl(value) {
   try {
     const url = new URL(value);
@@ -254,14 +272,17 @@ function safeUrl(value) {
 }
 export {
   TOOL_FIELD_LABELS,
+  claimSupportText,
   copyToClipboard,
   escapeAttr,
   escapeHtml,
+  inputsText,
   rafThrottle,
   renderAnswerBody,
   renderMarkdown,
   riskTone,
   safeUrl,
   toolCardRows,
-  toolHeadline
+  toolHeadline,
+  traceStepText
 };
